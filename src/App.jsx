@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, Settings, Plus, X, UploadCloud, Copy, Edit2, 
   ExternalLink, ArrowLeft, CheckCircle2, AlertCircle, Loader2,
-  Eye, EyeOff, Sparkles
+  Eye, EyeOff, Sparkles, FileText
 } from 'lucide-react';
 
 // --- Auto-Detection & Storage Config ---
@@ -197,7 +197,8 @@ export default function App() {
         <PreviewPane tool={previewTool} onClose={() => setActiveModal(null)} />
       )}
 
-      <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-transform duration-300 z-50 ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'} ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
+      {/* --- Upgraded Top-Center Toast --- */}
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 z-[110] ${toast.show ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-8 opacity-0 scale-95'} ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
         {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} className="text-green-400" />}
         <span className="font-medium text-sm">{toast.msg}</span>
       </div>
@@ -246,6 +247,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   const [status, setStatus] = useState({ active: false, msg: '', isError: false });
   const [showPat, setShowPat] = useState(false);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
 
   const handleAutoCommit = () => {
     if (!formData.name || !formData.desc) {
@@ -260,31 +262,78 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     setFormData(prev => ({ ...prev, commitMsg: `${prefix} ${formData.name}\n\n${cleanDesc}` }));
   };
 
+  const addNewFiles = (extractedFiles) => {
+    setFiles(prev => {
+      // Prevent duplicates by checking paths
+      const newFiles = extractedFiles.filter(nf => !prev.some(pf => pf.path === nf.path));
+      return [...prev, ...newFiles];
+    });
+  };
+
   const handleFileDrop = async (e) => {
     e.preventDefault();
-    const items = e.dataTransfer?.items || e.target?.files;
+    e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+    const items = e.dataTransfer?.items;
     if (!items) return;
     
     setStatus({ active: true, msg: "Indexing files...", isError: false });
     let extractedFiles = [];
     
-    if (e.target?.files) {
-      for (let f of e.target.files) {
-        if (f.name.endsWith('.zip')) await processZip(f, extractedFiles);
-        else extractedFiles.push({ path: f.webkitRelativePath || f.name, file: f });
-      }
-    } else {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i].webkitGetAsEntry();
-        if (item && item.isFile) {
-           const file = await new Promise(res => item.file(res));
-           if (file.name.endsWith('.zip')) await processZip(file, extractedFiles);
-           else extractedFiles.push({ path: item.fullPath.replace(/^\//, ''), file });
+    const processEntry = async (entry) => {
+      if (entry.isFile) {
+        const file = await new Promise(res => entry.file(res));
+        if (file.name.endsWith('.zip')) {
+          await processZip(file, extractedFiles);
+        } else {
+          extractedFiles.push({ path: entry.fullPath.replace(/^\//, ''), file });
         }
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const entries = await new Promise((resolve) => {
+          let allEntries = [];
+          const readNext = () => {
+            dirReader.readEntries(res => {
+              if (res.length) {
+                allEntries = allEntries.concat(res);
+                readNext();
+              } else {
+                resolve(allEntries);
+              }
+            });
+          };
+          readNext();
+        });
+        for (let ent of entries) await processEntry(ent);
+      }
+    };
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i].webkitGetAsEntry();
+      if (item) await processEntry(item);
+    }
+    
+    addNewFiles(extractedFiles);
+    setStatus({ active: false, msg: "", isError: false });
+  };
+
+  const handleFileInput = async (e) => {
+    const selected = e.target.files;
+    if (!selected || selected.length === 0) return;
+    
+    setStatus({ active: true, msg: "Indexing files...", isError: false });
+    let extractedFiles = [];
+    
+    for (let f of selected) {
+      if (f.name.endsWith('.zip')) {
+        await processZip(f, extractedFiles);
+      } else {
+        extractedFiles.push({ path: f.webkitRelativePath || f.name, file: f });
       }
     }
     
-    setFiles(extractedFiles);
+    addNewFiles(extractedFiles);
+    // Reset the input value so the same file can be re-selected if deleted
+    e.target.value = '';
     setStatus({ active: false, msg: "", isError: false });
   };
 
@@ -357,7 +406,6 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
 
     const slug = isEdit || isDelete ? editTool.id : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     
-    // Slug Collision Check
     if (!isEdit && !isDelete && existingTools.some(t => t.id === slug)) {
       return setStatus({ active: true, msg: "A tool with this name already exists. Please choose a unique name.", isError: true });
     }
@@ -458,18 +506,58 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             <input type="text" value={formData.tags} onChange={e => setFormData({...formData, tags: e.target.value})} placeholder="CSV format: Image, PDF, Developer" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
           </div>
           
+          {/* --- Upgraded Visual File Upload Dropzone --- */}
           <div 
             onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
             onDragLeave={e => e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50')}
             onDrop={handleFileDrop}
-            onClick={() => fileInputRef.current.click()}
-            className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors"
+            className={`border-2 border-dashed border-gray-300 rounded-xl p-6 text-center transition-colors ${files.length > 0 ? 'bg-gray-50 cursor-default' : 'hover:bg-gray-100'}`}
           >
-            <UploadCloud size={32} className="text-blue-600 mb-2" />
-            <p className="text-sm font-semibold text-gray-800">
-              {files.length > 0 ? `${files.length} files staged` : (isEdit ? 'Drop files ONLY to overwrite code' : 'Browse or drop files here')}
-            </p>
-            <input type="file" ref={fileInputRef} onChange={handleFileDrop} className="hidden" multiple webkitdirectory="true" />
+            {files.length > 0 ? (
+              <div className="w-full text-left">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Attached Files ({files.length})</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => fileInputRef.current.click()} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider flex items-center gap-1">
+                      <Plus size={12} /> Files
+                    </button>
+                    <button type="button" onClick={() => folderInputRef.current.click()} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider flex items-center gap-1">
+                      <Plus size={12} /> Folder
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {files.map((sf, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2.5 shadow-sm group">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
+                          <FileText size={16} />
+                        </div>
+                        <span className="text-sm font-medium text-gray-700 truncate" title={sf.path}>{sf.path}</span>
+                      </div>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setFiles(files.filter((_, i) => i !== idx)); }} className="text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center cursor-pointer" onClick={() => fileInputRef.current.click()}>
+                <UploadCloud size={32} className="text-blue-600 mb-2 mx-auto" />
+                <p className="text-sm font-semibold text-gray-800 mb-3">
+                  {isEdit ? 'Drop files ONLY to overwrite code' : 'Drag & drop files/folders here'}
+                </p>
+                <div className="flex gap-2 justify-center" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => fileInputRef.current.click()} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded shadow-sm hover:bg-gray-50 transition-colors">Browse Files</button>
+                  <button type="button" onClick={() => folderInputRef.current.click()} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded shadow-sm hover:bg-gray-50 transition-colors">Browse Folder</button>
+                </div>
+              </div>
+            )}
+            
+            {/* Split inputs to safely support both standard files AND folders without OS conflicts */}
+            <input type="file" ref={fileInputRef} onChange={handleFileInput} className="hidden" multiple />
+            <input type="file" ref={folderInputRef} onChange={handleFileInput} className="hidden" multiple webkitdirectory="true" />
           </div>
 
           <div className="pt-4 border-t border-gray-200 space-y-4">
