@@ -6,9 +6,12 @@ import {
 } from 'lucide-react';
 
 // --- Auto-Detection & Storage Config ---
+const STORAGE_KEY = 'web-tools';
+const BRANCH = 'main';
+
 const getAutoConfig = () => {
   let owner = '';
-  let repo = 'web-tools'; 
+  let repo = STORAGE_KEY; // [NOTE]: Intentionally kept same for easier management
   
   const hostname = window.location.hostname;
   const pathname = window.location.pathname;
@@ -22,25 +25,25 @@ const getAutoConfig = () => {
     repo = pathSegments[0];
   }
   
-  return { owner, repo, branch: 'main' };
+  return { owner, repo };
 };
-
-const AUTO_CONFIG = getAutoConfig();
-const MASTER_STORAGE_KEY = 'web-tools';
 
 export default function App() {
   // --- State Management ---
   const [tools, setTools] = useState([]);
+  
+  // Lazy initialize to prevent parsing window.location on every render
   const [config, setConfig] = useState(() => {
     try {
-      const master = JSON.parse(localStorage.getItem(MASTER_STORAGE_KEY) || '{}');
-      return master.ghToolsConfig ? master.ghToolsConfig : AUTO_CONFIG;
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
     } catch {
-      return AUTO_CONFIG;
+      console.log("No config found in storage, falling back to auto-detect.");
     }
+    return getAutoConfig();
   });
+
   const [searchQuery, setSearchQuery] = useState('');
-  
   const [activeModal, setActiveModal] = useState(null);
   const [previewTool, setPreviewTool] = useState(null);
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
@@ -131,22 +134,22 @@ export default function App() {
               <div 
                 key={tool.id} 
                 onClick={() => { setPreviewTool(tool); setActiveModal('preview'); }}
-                className="group block bg-white border border-gray-200 rounded-xl p-5 hover:-translate-y-1 hover:shadow-xl hover:border-blue-500 transition-all cursor-pointer relative"
+                className="group block bg-white border border-gray-200 rounded-xl p-5 cursor-pointer relative hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-100 hover:border-blue-300 transition-all duration-300"
               >
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-3 right-3 flex gap-1 z-20">
-                  <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'publish', tool }); }} className="p-2 bg-white/90 hover:bg-gray-100 rounded-lg text-gray-500 shadow-sm border border-gray-100" title="Edit">
+                  <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'publish', tool }); }} className="p-2 bg-white/90 hover:bg-gray-100 rounded-lg text-gray-500 shadow-sm border border-gray-100 transition-colors" title="Edit">
                     <Edit2 size={16} />
                   </button>
-                  <button onClick={(e) => copyToClipboard(e, tool.id)} className="p-2 bg-white/90 hover:bg-blue-600 hover:text-white rounded-lg text-gray-500 shadow-sm border border-gray-100" title="Copy Link">
+                  <button onClick={(e) => copyToClipboard(e, tool.id)} className="p-2 bg-white/90 hover:bg-gray-100 rounded-lg text-gray-500 shadow-sm border border-gray-100 transition-colors" title="Copy Link">
                     <Copy size={16} />
                   </button>
                 </div>
                 <div className="flex items-start gap-4">
-                  <div className={`flex-shrink-0 w-12 h-12 rounded-lg ${tool.avatar?.bg || 'bg-blue-50'} ${tool.avatar?.text || 'text-blue-600'} flex items-center justify-center font-bold text-xl group-hover:bg-blue-600 group-hover:text-white transition-colors`}>
+                  <div className={`flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center font-bold text-xl transition-all duration-300 ${tool.avatar?.bg || 'bg-blue-50'} ${tool.avatar?.text || 'text-blue-600'} group-hover:bg-blue-600 group-hover:text-white`}>
                     {tool.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">{tool.name}</h2>
+                    <h2 className="text-lg font-bold text-gray-800 transition-colors duration-300 group-hover:text-blue-600 line-clamp-1">{tool.name}</h2>
                     <p className="mt-1 text-sm text-gray-500 line-clamp-2 leading-relaxed">{tool.description}</p>
                   </div>
                 </div>
@@ -174,9 +177,7 @@ export default function App() {
           onClose={() => setActiveModal(null)} 
           onSave={(c) => { 
             setConfig(c); 
-            const master = JSON.parse(localStorage.getItem(MASTER_STORAGE_KEY) || '{}');
-            master.ghToolsConfig = c;
-            localStorage.setItem(MASTER_STORAGE_KEY, JSON.stringify(master)); 
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ owner: c.owner, repo: c.repo })); 
             setActiveModal(null); 
             showToast('Settings Saved'); 
           }} 
@@ -205,26 +206,20 @@ export default function App() {
 }
 
 function SettingsModal({ config, onClose, onSave }) {
-  const [localConfig, setLocalConfig] = useState(config);
+  const [localConfig, setLocalConfig] = useState({ owner: config.owner, repo: config.repo });
   
   return (
     <div className="fixed inset-0 bg-gray-900/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Repository Configuration</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Target Repository</h2>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Owner</label>
-              <input type="text" value={localConfig.owner} onChange={e => setLocalConfig({...localConfig, owner: e.target.value})} placeholder="github-user" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Repo Name</label>
-              <input type="text" value={localConfig.repo} onChange={e => setLocalConfig({...localConfig, repo: e.target.value})} placeholder="web-tools" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">GitHub Owner</label>
+            <input type="text" value={localConfig.owner} onChange={e => setLocalConfig({...localConfig, owner: e.target.value})} placeholder="github-user" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Source Branch</label>
-            <input type="text" value={localConfig.branch} onChange={e => setLocalConfig({...localConfig, branch: e.target.value})} placeholder="main" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+            <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Repository Name</label>
+            <input type="text" value={localConfig.repo} onChange={e => setLocalConfig({...localConfig, repo: e.target.value})} placeholder="web-tools" className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
         <div className="mt-8 flex justify-end gap-3">
@@ -294,26 +289,31 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   };
 
   const processZip = async (file, fileArray) => {
-    const loadJSZip = () => new Promise((resolve, reject) => {
-      if (window.JSZip) return resolve(window.JSZip);
-      if (document.getElementById('jszip-script')) {
-        const check = setInterval(() => {
-          if (window.JSZip) {
-            clearInterval(check);
-            resolve(window.JSZip);
-          }
-        }, 100);
-        return;
-      }
-      const script = document.createElement('script');
-      script.id = 'jszip-script';
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-      script.onload = () => resolve(window.JSZip);
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
+    let JSZipModule;
+    try {
+      JSZipModule = (await import('jszip')).default;
+    } catch {
+      const loadJSZip = () => new Promise((resolve, reject) => {
+        if (window.JSZip) return resolve(window.JSZip);
+        if (document.getElementById('jszip-script')) {
+          const check = setInterval(() => {
+            if (window.JSZip) {
+              clearInterval(check);
+              resolve(window.JSZip);
+            }
+          }, 100);
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'jszip-script';
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = () => resolve(window.JSZip);
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      JSZipModule = await loadJSZip();
+    }
 
-    const JSZipModule = await loadJSZip();
     const zip = await JSZipModule.loadAsync(file);
     for (const [path, zipEntry] of Object.entries(zip.files)) {
       if (!zipEntry.dir) {
@@ -343,7 +343,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       try {
         const res = await fetch(liveUrl, { cache: 'no-store' });
         if (res.ok) return true;
-      } catch { console.log("Deployment not live yet, retrying..."); }
+      } catch { /* ignore error */ }
       await new Promise(r => setTimeout(r, 10000));
       retries++;
     }
@@ -365,7 +365,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     try {
       setStatus({ active: true, msg: "Authenticating session...", isError: false });
       
-      const refData = await ghFetch(`/git/ref/heads/${config.branch}`);
+      const refData = await ghFetch(`/git/refs/heads/${BRANCH}`);
       const commitSha = refData.object.sha;
       const commitData = await ghFetch(`/git/commits/${commitSha}`);
       const baseTreeSha = commitData.tree.sha;
@@ -423,7 +423,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       }
 
       const newCommit = await ghFetch(`/git/commits`, { method: 'POST', body: JSON.stringify({ message: finalMsg, tree: newTree.sha, parents: [commitSha] }) });
-      await ghFetch(`/git/refs/heads/${config.branch}`, { method: 'PATCH', body: JSON.stringify({ sha: newCommit.sha }) });
+      await ghFetch(`/git/refs/heads/${BRANCH}`, { method: 'PATCH', body: JSON.stringify({ sha: newCommit.sha }) });
 
       if (!isDelete) {
         const liveUrl = `https://${config.owner}.github.io/${config.repo}/tools/${slug}/index.html`;
@@ -546,14 +546,23 @@ function PreviewPane({ tool, onClose }) {
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-white animate-in slide-in-from-right-full duration-300">
       <div className="h-14 bg-gray-900 border-b border-gray-800 flex items-center justify-between px-4 text-white shadow-xl relative z-10">
-        <button onClick={onClose} className="px-3 py-1.5 hover:bg-gray-800 rounded-lg flex items-center gap-2 text-sm font-bold text-gray-300 transition-colors">
+        
+        <button onClick={onClose} className="px-3 py-1.5 hover:bg-gray-800 rounded-lg flex items-center gap-2 text-sm font-semibold text-gray-300 transition-colors">
           <ArrowLeft size={16} />
           Back to Dashboard
         </button>
-        <h3 className="font-bold text-sm hidden md:block tracking-tight">{tool.name}</h3>
-        <a href={tool.url} target="_blank" rel="noreferrer" className="px-3 py-1.5 hover:bg-gray-800 rounded-lg text-xs font-bold text-gray-400 hover:text-white transition-colors uppercase flex items-center gap-2">
+        
+        <div className="hidden md:flex items-center gap-2.5">
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.6)]"></div>
+          <h3 className="text-[0.95rem] font-semibold text-gray-100 tracking-wide line-clamp-1">
+            {tool.name}
+          </h3>
+        </div>
+        
+        <a href={tool.url} target="_blank" rel="noreferrer" className="px-3 py-1.5 hover:bg-gray-800 rounded-lg text-xs font-semibold text-gray-400 hover:text-white transition-colors flex items-center gap-2">
           Open Fullscreen <ExternalLink size={14} />
         </a>
+        
       </div>
       <div className="flex-grow bg-white w-full h-full relative">
         <iframe src={tool.url} className="absolute inset-0 w-full h-full border-none" title={tool.name} />
