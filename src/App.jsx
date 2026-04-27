@@ -238,11 +238,12 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   const [formData, setFormData] = useState({
     name: editTool?.name || '',
     desc: editTool?.description || '',
-    tags: editTool?.tags?.join(', ') || '',
+    tags: editTool?.tags || [],
     commitMsg: '',
     pat: ''
   });
   
+  const [tagInput, setTagInput] = useState('');
   const [files, setFiles] = useState([]);
   const [status, setStatus] = useState({ active: false, msg: '', isError: false });
   const [showPat, setShowPat] = useState(false);
@@ -262,7 +263,54 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     setFormData(prev => ({ ...prev, commitMsg: `${prefix} ${formData.name}\n\n${cleanDesc}` }));
   };
 
+  const handleTagKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+      e.preventDefault();
+      const newTag = tagInput.trim().replace(/,/g, '');
+      if (newTag && !formData.tags.includes(newTag)) {
+        setFormData(p => ({ ...p, tags: [...p.tags, newTag] }));
+      }
+      setTagInput('');
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    setFormData(p => ({ ...p, tags: p.tags.filter(t => t !== tagToRemove) }));
+  };
+
   const addNewFiles = (extractedFiles) => {
+    // 1. 100MB Total Upload Size Check
+    const totalSize = [...files, ...extractedFiles].reduce((acc, f) => acc + (f.file.size || 0), 0);
+    if (totalSize > 100 * 1024 * 1024) {
+      showToast("Total upload size exceeds the 100MB limit.", "error");
+      return;
+    }
+
+    // 2. index.html Smart Fallback Logic (Option C)
+    const allFiles = [...files, ...extractedFiles];
+    const htmlFiles = allFiles.filter(f => f.path.toLowerCase().endsWith('.html'));
+    const hasIndex = allFiles.some(f => f.path.toLowerCase().endsWith('index.html') || f.path.toLowerCase().endsWith('index.htm'));
+
+    if (!hasIndex && allFiles.length > 0) {
+      if (htmlFiles.length === 1) {
+        // Auto-rename single HTML file to index.html
+        const targetHtml = extractedFiles.find(f => f.path === htmlFiles[0].path);
+        if (targetHtml) {
+           const oldName = targetHtml.path;
+           const pathParts = targetHtml.path.split('/');
+           pathParts[pathParts.length - 1] = 'index.html';
+           targetHtml.path = pathParts.join('/');
+           showToast(`Auto-renamed ${oldName} to index.html`, "success");
+        }
+      } else if (htmlFiles.length > 1) {
+        showToast("Multiple HTML files found. Please explicitly name your main file index.html", "error");
+        return; // Reject staging
+      } else {
+        showToast("No HTML file found. A web tool must include an HTML file.", "error");
+        return; // Reject staging
+      }
+    }
+
     setFiles(prev => {
       // Prevent duplicates by checking paths
       const newFiles = extractedFiles.filter(nf => !prev.some(pf => pf.path === nf.path));
@@ -310,6 +358,14 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     for (let i = 0; i < items.length; i++) {
       const item = items[i].webkitGetAsEntry();
       if (item) await processEntry(item);
+    }
+    
+    // Drag & Drop Confirm Dialog to mirror OS Prompt consistency
+    if (extractedFiles.length > 0) {
+      if (!window.confirm(`Upload ${extractedFiles.length} file(s) to this site?\nThis will upload all dropped files. Only do this if you trust the site.`)) {
+        setStatus({ active: false, msg: "", isError: false });
+        return;
+      }
     }
     
     addNewFiles(extractedFiles);
@@ -443,7 +499,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
           id: slug,
           name: formData.name,
           description: formData.desc,
-          tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean),
+          tags: formData.tags, // Array is now managed directly
           url: `./tools/${slug}/index.html`,
           avatar: isEdit ? editTool.avatar : {
             bg: ['bg-blue-50', 'bg-indigo-50', 'bg-emerald-50'][Math.floor(Math.random() * 3)],
@@ -501,9 +557,28 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</label>
             <textarea rows="2" value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})} placeholder="Explain what this tool does..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"></textarea>
           </div>
+          
+          {/* --- Interactive Tag Pills --- */}
           <div>
-            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Search Keywords / Tags (Optional)</label>
-            <input type="text" value={formData.tags} onChange={e => setFormData({...formData, tags: e.target.value})} placeholder="CSV format: Image, PDF, Developer" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tags (Space or Comma to add)</label>
+            <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
+              {formData.tags.map(tag => (
+                <span key={tag} className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                  {tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="hover:bg-blue-200 rounded-full p-0.5 transition-colors">
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <input 
+                type="text" 
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder={formData.tags.length === 0 ? "e.g. Image, PDF, Developer" : ""}
+                className="flex-grow min-w-[100px] bg-transparent outline-none text-sm p-1" 
+              />
+            </div>
           </div>
           
           {/* --- Upgraded Visual File Upload Dropzone --- */}
