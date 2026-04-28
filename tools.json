@@ -1,0 +1,15 @@
+[
+  {
+    "id": "favicon-generator",
+    "name": "Favicon Generator",
+    "description": "Upload your original logo to instantly generate required standard favicon sizes.",
+    "tags": [
+      "image"
+    ],
+    "url": "./tools/favicon-generator/index.html",
+    "avatar": {
+      "bg": "bg-indigo-50",
+      "text": "text-indigo-600"
+    }
+  }
+]
