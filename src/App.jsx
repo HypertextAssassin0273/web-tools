@@ -197,7 +197,6 @@ export default function App() {
         <PreviewPane tool={previewTool} onClose={() => setActiveModal(null)} />
       )}
 
-      {/* --- Upgraded Top-Center Toast --- */}
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 z-[110] ${toast.show ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-8 opacity-0 scale-95'} ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
         {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} className="text-green-400" />}
         <span className="font-medium text-sm">{toast.msg}</span>
@@ -247,6 +246,8 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   const [files, setFiles] = useState([]);
   const [status, setStatus] = useState({ active: false, msg: '', isError: false });
   const [showPat, setShowPat] = useState(false);
+  const [entryPointPrompt, setEntryPointPrompt] = useState(null);
+  
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
 
@@ -259,71 +260,120 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     let cleanDesc = formData.desc.replace(/\n+/g, ' — ');
     if (cleanDesc.length > 60) cleanDesc = cleanDesc.substring(0, 60) + '...';
     
-    const prefix = isEdit ? (files.length > 0 ? 'fix: update code and metadata for' : 'chore: update metadata for') : 'feat: publish';
+    const prefix = isEdit ? 'fix: update code and metadata for' : 'feat: publish';
     setFormData(prev => ({ ...prev, commitMsg: `${prefix} ${formData.name}\n\n${cleanDesc}` }));
+  };
+
+  const processTags = (input) => {
+    if (!input) return;
+    const newTags = input.split(/[\s,]+/)
+      .map(t => t.replace(/[^a-zA-Z0-9-]/g, '').trim())
+      .filter(Boolean);
+    if (newTags.length > 0) {
+      setFormData(p => {
+        const combined = [...p.tags, ...newTags];
+        return { ...p, tags: [...new Set(combined)] };
+      });
+    }
+    setTagInput('');
   };
 
   const handleTagKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
       e.preventDefault();
-      const newTag = tagInput.trim().replace(/,/g, '');
-      if (newTag && !formData.tags.includes(newTag)) {
-        setFormData(p => ({ ...p, tags: [...p.tags, newTag] }));
-      }
-      setTagInput('');
+      processTags(tagInput);
     }
+  };
+
+  const handleTagPaste = (e) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    processTags(tagInput + ' ' + pastedText);
   };
 
   const removeTag = (tagToRemove) => {
     setFormData(p => ({ ...p, tags: p.tags.filter(t => t !== tagToRemove) }));
   };
 
-  const addNewFiles = (extractedFiles) => {
-    // 1. 100MB Total Upload Size Check
-    const totalSize = [...files, ...extractedFiles].reduce((acc, f) => acc + (f.file.size || 0), 0);
+  const processExtractedFiles = (extractedFiles) => {
+    if (extractedFiles.length === 0) return;
+
+    // 1. Flatten ONLY IF everything shares a single root folder
+    const firstPathParts = extractedFiles[0].path.split('/');
+    if (firstPathParts.length > 1) {
+      const baseFolder = firstPathParts[0] + '/';
+      const allShareBase = extractedFiles.every(f => f.path.startsWith(baseFolder));
+      if (allShareBase) {
+        extractedFiles.forEach(f => {
+          f.path = f.path.substring(baseFolder.length);
+        });
+      }
+    }
+
+    // 2. 100MB Total Upload Size Check
+    const totalSize = extractedFiles.reduce((acc, f) => acc + (f.file.size || 0), 0);
     if (totalSize > 100 * 1024 * 1024) {
       showToast("Total upload size exceeds the 100MB limit.", "error");
       return;
     }
 
-    // 2. index.html Smart Fallback Logic (Option C)
-    const allFiles = [...files, ...extractedFiles];
-    const htmlFiles = allFiles.filter(f => f.path.toLowerCase().endsWith('.html'));
-    const hasIndex = allFiles.some(f => f.path.toLowerCase().endsWith('index.html') || f.path.toLowerCase().endsWith('index.htm'));
+    // 3. Strict Entry Point Resolution & Staging (No more intermediate confirm modal)
+    const rootHtmlFiles = extractedFiles.filter(f => !f.path.includes('/') && f.path.toLowerCase().endsWith('.html'));
+    const hasIndex = extractedFiles.some(f => !f.path.includes('/') && (f.path.toLowerCase() === 'index.html' || f.path.toLowerCase() === 'index.htm'));
 
-    if (!hasIndex && allFiles.length > 0) {
-      if (htmlFiles.length === 1) {
-        // Auto-rename single HTML file to index.html
-        const targetHtml = extractedFiles.find(f => f.path === htmlFiles[0].path);
-        if (targetHtml) {
-           const oldName = targetHtml.path;
-           const pathParts = targetHtml.path.split('/');
-           pathParts[pathParts.length - 1] = 'index.html';
-           targetHtml.path = pathParts.join('/');
-           showToast(`Auto-renamed ${oldName} to index.html`, "success");
-        }
-      } else if (htmlFiles.length > 1) {
-        showToast("Multiple HTML files found. Please explicitly name your main file index.html", "error");
-        return; // Reject staging
+    if (!hasIndex) {
+      if (rootHtmlFiles.length === 1) {
+        const targetFile = extractedFiles.find(f => f.path === rootHtmlFiles[0].path);
+        const oldName = targetFile.path;
+        targetFile.path = 'index.html';
+        setFiles(extractedFiles);
+        showToast(`Auto-renamed ${oldName} to index.html`, "success");
+        return;
+      } else if (rootHtmlFiles.length > 1) {
+        setEntryPointPrompt({ files: extractedFiles, htmls: rootHtmlFiles.map(f => f.path) });
+        return;
       } else {
-        showToast("No HTML file found. A web tool must include an HTML file.", "error");
-        return; // Reject staging
+        showToast("Tool must include a root HTML file. Check for double-nested folders.", "error");
+        return;
       }
     }
 
-    setFiles(prev => {
-      // Prevent duplicates by checking paths
-      const newFiles = extractedFiles.filter(nf => !prev.some(pf => pf.path === nf.path));
-      return [...prev, ...newFiles];
-    });
+    setFiles(extractedFiles);
+  };
+
+  const selectEntryPoint = (path) => {
+    const extractedFiles = entryPointPrompt.files;
+    const targetFile = extractedFiles.find(f => f.path === path);
+    const oldName = targetFile.path;
+    targetFile.path = 'index.html';
+    setFiles(extractedFiles);
+    setEntryPointPrompt(null);
+    showToast(`Auto-renamed ${oldName} to index.html`, "success");
   };
 
   const handleFileDrop = async (e) => {
     e.preventDefault();
     e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+    if (files.length > 0) return; // Ignore drops if files are already staged
+
     const items = e.dataTransfer?.items;
     if (!items) return;
     
+    // Strict Validation: Ensure ZIPs are completely isolated
+    let zipCount = 0;
+    let otherCount = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const entry = items[i].webkitGetAsEntry();
+      if (entry) {
+        if (entry.isFile && entry.name.endsWith('.zip')) zipCount++;
+        else otherCount++;
+      }
+    }
+
+    if (zipCount > 1) return showToast("Multiple ZIPs not allowed. Drop a single ZIP.", "error");
+    if (zipCount === 1 && otherCount > 0) return showToast("Cannot mix ZIP archives with folders or individual files.", "error");
+
     setStatus({ active: true, msg: "Indexing files...", isError: false });
     let extractedFiles = [];
     
@@ -355,27 +405,41 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       }
     };
 
+    const entries = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i].webkitGetAsEntry();
-      if (item) await processEntry(item);
+      if (item) entries.push(item);
+    }
+
+    for (const entry of entries) {
+      await processEntry(entry);
     }
     
-    // Drag & Drop Confirm Dialog to mirror OS Prompt consistency
-    if (extractedFiles.length > 0) {
-      if (!window.confirm(`Upload ${extractedFiles.length} file(s) to this site?\nThis will upload all dropped files. Only do this if you trust the site.`)) {
-        setStatus({ active: false, msg: "", isError: false });
-        return;
-      }
-    }
-    
-    addNewFiles(extractedFiles);
     setStatus({ active: false, msg: "", isError: false });
+    processExtractedFiles(extractedFiles);
   };
 
   const handleFileInput = async (e) => {
     const selected = e.target.files;
     if (!selected || selected.length === 0) return;
     
+    // Strict Validation: Ensure ZIPs are isolated
+    let zipCount = 0;
+    let otherCount = 0;
+    for (let i = 0; i < selected.length; i++) {
+      if (selected[i].name.endsWith('.zip')) zipCount++;
+      else otherCount++;
+    }
+
+    if (zipCount > 1) {
+      e.target.value = '';
+      return showToast("Multiple ZIPs not allowed. Select a single ZIP.", "error");
+    }
+    if (zipCount === 1 && otherCount > 0) {
+      e.target.value = '';
+      return showToast("Cannot mix ZIP archives with individual files.", "error");
+    }
+
     setStatus({ active: true, msg: "Indexing files...", isError: false });
     let extractedFiles = [];
     
@@ -387,10 +451,9 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       }
     }
     
-    addNewFiles(extractedFiles);
-    // Reset the input value so the same file can be re-selected if deleted
     e.target.value = '';
     setStatus({ active: false, msg: "", isError: false });
+    processExtractedFiles(extractedFiles);
   };
 
   const processZip = async (file, fileArray) => {
@@ -485,6 +548,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             reader.readAsDataURL(sf.file);
           });
           const blobData = await ghFetch(`/git/blobs`, { method: 'POST', body: JSON.stringify({ content: contentBase64, encoding: 'base64' }) });
+          
           treeItems.push({ path: `public/tools/${slug}/${sf.path}`, mode: '100644', type: 'blob', sha: blobData.sha });
         }
       }
@@ -499,7 +563,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
           id: slug,
           name: formData.name,
           description: formData.desc,
-          tags: formData.tags, // Array is now managed directly
+          tags: formData.tags,
           url: `./tools/${slug}/index.html`,
           avatar: isEdit ? editTool.avatar : {
             bg: ['bg-blue-50', 'bg-indigo-50', 'bg-emerald-50'][Math.floor(Math.random() * 3)],
@@ -542,7 +606,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
 
   return (
     <div className="fixed inset-0 bg-gray-900/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-xl max-h-[95vh] overflow-y-auto no-scrollbar">
+      <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-xl max-h-[95vh] overflow-y-auto no-scrollbar relative">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-gray-900">{isEdit ? 'Edit Tool' : 'Publish New Tool'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
@@ -551,14 +615,13 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
         <div className="space-y-4">
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tool Name</label>
-            <input type="text" disabled={isEdit} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="JSON Formatter" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 font-bold text-gray-900 outline-none disabled:opacity-50" />
+            <input type="text" disabled={isEdit} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.replace(/[^a-zA-Z0-9 \-_]/g, '')})} placeholder="JSON Formatter" className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 font-bold text-gray-900 outline-none disabled:opacity-50" />
           </div>
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Description</label>
             <textarea rows="2" value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})} placeholder="Explain what this tool does..." className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"></textarea>
           </div>
           
-          {/* --- Interactive Tag Pills --- */}
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tags (Space or Comma to add)</label>
             <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 transition-shadow">
@@ -573,17 +636,18 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
               <input 
                 type="text" 
                 value={tagInput}
-                onChange={e => setTagInput(e.target.value)}
+                onChange={e => setTagInput(e.target.value.replace(/[^a-zA-Z0-9\s,-]/g, ''))}
                 onKeyDown={handleTagKeyDown}
+                onPaste={handleTagPaste}
+                onBlur={() => processTags(tagInput)}
                 placeholder={formData.tags.length === 0 ? "e.g. Image, PDF, Developer" : ""}
                 className="flex-grow min-w-[100px] bg-transparent outline-none text-sm p-1" 
               />
             </div>
           </div>
           
-          {/* --- Upgraded Visual File Upload Dropzone --- */}
           <div 
-            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
+            onDragOver={e => { if (files.length === 0) { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); } }}
             onDragLeave={e => e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50')}
             onDrop={handleFileDrop}
             className={`border-2 border-dashed border-gray-300 rounded-xl p-6 text-center transition-colors ${files.length > 0 ? 'bg-gray-50 cursor-default' : 'hover:bg-gray-100'}`}
@@ -591,28 +655,18 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             {files.length > 0 ? (
               <div className="w-full text-left">
                 <div className="flex justify-between items-center mb-3">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Attached Files ({files.length})</p>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => fileInputRef.current.click()} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider flex items-center gap-1">
-                      <Plus size={12} /> Files
-                    </button>
-                    <button type="button" onClick={() => folderInputRef.current.click()} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-wider flex items-center gap-1">
-                      <Plus size={12} /> Folder
-                    </button>
-                  </div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Staged Files ({files.length})</p>
+                  <button type="button" onClick={() => setFiles([])} className="text-[10px] font-bold text-red-600 hover:text-red-800 uppercase tracking-wider flex items-center gap-1">
+                    <X size={12} /> Clear & Reselect
+                  </button>
                 </div>
                 <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                   {files.map((sf, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-2.5 shadow-sm group">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
-                          <FileText size={16} />
-                        </div>
-                        <span className="text-sm font-medium text-gray-700 truncate" title={sf.path}>{sf.path}</span>
+                    <div key={idx} className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg p-2.5 shadow-sm overflow-hidden">
+                      <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
+                        <FileText size={16} />
                       </div>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setFiles(files.filter((_, i) => i !== idx)); }} className="text-gray-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <X size={16} />
-                      </button>
+                      <span className="text-sm font-medium text-gray-700 truncate" title={sf.path}>{sf.path}</span>
                     </div>
                   ))}
                 </div>
@@ -621,7 +675,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
               <div className="flex flex-col items-center justify-center cursor-pointer" onClick={() => fileInputRef.current.click()}>
                 <UploadCloud size={32} className="text-blue-600 mb-2 mx-auto" />
                 <p className="text-sm font-semibold text-gray-800 mb-3">
-                  {isEdit ? 'Drop files ONLY to overwrite code' : 'Drag & drop files/folders here'}
+                  {isEdit ? 'Drop the full tool folder/zip to re-upload' : 'Drag & drop a folder, zip, or files here'}
                 </p>
                 <div className="flex gap-2 justify-center" onClick={(e) => e.stopPropagation()}>
                   <button type="button" onClick={() => fileInputRef.current.click()} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-semibold rounded shadow-sm hover:bg-gray-50 transition-colors">Browse Files</button>
@@ -630,7 +684,6 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
               </div>
             )}
             
-            {/* Split inputs to safely support both standard files AND folders without OS conflicts */}
             <input type="file" ref={fileInputRef} onChange={handleFileInput} className="hidden" multiple />
             <input type="file" ref={folderInputRef} onChange={handleFileInput} className="hidden" multiple webkitdirectory="true" />
           </div>
@@ -700,6 +753,37 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             </button>
           </div>
         </div>
+
+        {/* --- Entry Point Selection Modal --- */}
+        {entryPointPrompt && (
+          <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-[60] flex items-center justify-center p-6 rounded-2xl animate-in fade-in duration-200">
+            <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border border-gray-100 max-w-sm w-full text-center">
+              <FileText size={40} className="text-blue-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Select Entry Point</h3>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                We couldn't find an <strong>index.html</strong> file in the root. Please select the main HTML file to serve as the entry point:
+              </p>
+              <div className="space-y-2 mb-8 max-h-40 overflow-y-auto">
+                {entryPointPrompt.htmls.map(path => (
+                  <button 
+                    key={path}
+                    onClick={() => selectEntryPoint(path)}
+                    className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg text-sm font-medium text-gray-700 hover:text-blue-700 transition-colors truncate"
+                  >
+                    {path}
+                  </button>
+                ))}
+              </div>
+              <button 
+                onClick={() => setEntryPointPrompt(null)} 
+                className="px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition-colors w-full"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
