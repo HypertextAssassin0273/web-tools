@@ -1,3 +1,7 @@
 @import "tailwindcss";
 
+/* Enable manual dark mode toggling */
+@variant dark (&:where(.dark, .dark *));
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

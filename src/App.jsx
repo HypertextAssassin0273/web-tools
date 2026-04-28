@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, Settings, Plus, X, UploadCloud, Copy, Edit2, 
   ExternalLink, ArrowLeft, CheckCircle2, AlertCircle, Loader2,
-  Eye, EyeOff, Sparkles, FileText, Monitor, ChevronDown
+  Eye, EyeOff, Sparkles, FileText, Monitor, ListFilter
 } from 'lucide-react';
 
 // --- Auto-Detection & Storage Config ---
@@ -238,10 +238,11 @@ export default function App() {
                 </datalist>
               </div>
               <div className="relative w-full sm:w-auto">
+                <ListFilter size={16} className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select 
                   value={config.sort}
                   onChange={(e) => handleSortChange(e.target.value)}
-                  className="w-full sm:w-auto bg-gray-900 dark:bg-black border border-gray-700 dark:border-gray-800 text-gray-300 hover:text-white text-sm font-medium rounded-lg pl-3 pr-10 py-2.5 focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors cursor-pointer appearance-none"
+                  className="w-full sm:w-auto bg-gray-900 dark:bg-black border border-gray-700 dark:border-gray-800 text-gray-300 hover:text-white text-sm font-medium rounded-lg pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors cursor-pointer appearance-none"
                 >
                   <option value="default">Default (Added tools)</option>
                   <option value="asc">Ascending (A-Z)</option>
@@ -249,7 +250,6 @@ export default function App() {
                   <option value="recent">Recently Used</option>
                   <option value="frequent">Most Frequently Used</option>
                 </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
             </div>
           </div>
