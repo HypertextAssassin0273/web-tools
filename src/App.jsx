@@ -2,17 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Search, Settings, Plus, X, UploadCloud, Copy, Edit2, 
   ExternalLink, ArrowLeft, CheckCircle2, AlertCircle, Loader2,
-  Eye, EyeOff, Sparkles, FileText
+  Eye, EyeOff, Sparkles, FileText, Monitor, ChevronDown
 } from 'lucide-react';
 
 // --- Auto-Detection & Storage Config ---
-const STORAGE_KEY = 'web-tools-config';
-const USAGE_KEY = 'web-tools-usage';
+const STORAGE_KEY = 'web-tools';
 const BRANCH = 'main';
 
 const getDefaultConfig = () => {
   let owner = '';
-  let repo = 'web-tools';
+  let repo = STORAGE_KEY; // [NOTE]: Intentionally kept same for easier management
   
   const hostname = window.location.hostname;
   const pathname = window.location.pathname;
@@ -36,25 +35,33 @@ const getDefaultConfig = () => {
   };
 };
 
+// Helper for unified local storage
+const getStorage = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+};
+
+const setStorage = (key, data) => {
+  const master = getStorage();
+  master[key] = data;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(master));
+};
+
 export default function App() {
   const [tools, setTools] = useState([]);
   
   // --- Global Config State ---
   const [config, setConfig] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return { ...getDefaultConfig(), ...JSON.parse(saved) };
-    } catch { console.log("Falling back to default config"); }
-    return getDefaultConfig();
+    const master = getStorage();
+    return { ...getDefaultConfig(), ...(master.config || {}) };
   });
 
   // --- Local Usage Analytics State ---
   const [usageStats, setUsageStats] = useState(() => {
-    try {
-      const saved = localStorage.getItem(USAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch { return {}; }
-    return {};
+    return getStorage().usage || {};
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,14 +75,18 @@ export default function App() {
     const applyTheme = (theme) => {
       if (theme === 'dark') {
         root.classList.add('dark');
+        root.style.colorScheme = 'dark';
       } else if (theme === 'light') {
         root.classList.remove('dark');
+        root.style.colorScheme = 'light';
       } else {
         // System
         if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
           root.classList.add('dark');
+          root.style.colorScheme = 'dark';
         } else {
           root.classList.remove('dark');
+          root.style.colorScheme = 'light';
         }
       }
     };
@@ -138,7 +149,7 @@ export default function App() {
   const handleSortChange = (newSort) => {
     const updatedConfig = { ...config, sort: newSort };
     setConfig(updatedConfig);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConfig));
+    setStorage('config', updatedConfig);
   };
 
   const showToast = (msg, type = 'success') => {
@@ -170,7 +181,7 @@ export default function App() {
       }
     };
     setUsageStats(newStats);
-    localStorage.setItem(USAGE_KEY, JSON.stringify(newStats));
+    setStorage('usage', newStats);
     
     setPreviewTool(tool);
     setActiveModal('preview');
@@ -226,17 +237,20 @@ export default function App() {
                   {allTags.map(tag => <option key={`tag-${tag}`} value={tag} />)}
                 </datalist>
               </div>
-              <select 
-                value={config.sort}
-                onChange={(e) => handleSortChange(e.target.value)}
-                className="bg-gray-900 dark:bg-black border border-gray-700 dark:border-gray-800 text-gray-300 hover:text-white text-sm font-medium rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors sm:w-auto w-full cursor-pointer appearance-none text-center sm:text-left"
-              >
-                <option value="default">Default (Added tools)</option>
-                <option value="asc">Ascending (A-Z)</option>
-                <option value="desc">Descending (Z-A)</option>
-                <option value="recent">Recently Used</option>
-                <option value="frequent">Most Frequently Used</option>
-              </select>
+              <div className="relative w-full sm:w-auto">
+                <select 
+                  value={config.sort}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  className="w-full sm:w-auto bg-gray-900 dark:bg-black border border-gray-700 dark:border-gray-800 text-gray-300 hover:text-white text-sm font-medium rounded-lg pl-3 pr-10 py-2.5 focus:outline-none focus:border-blue-500 dark:focus:border-blue-500 transition-colors cursor-pointer appearance-none"
+                >
+                  <option value="default">Default (Added tools)</option>
+                  <option value="asc">Ascending (A-Z)</option>
+                  <option value="desc">Descending (Z-A)</option>
+                  <option value="recent">Recently Used</option>
+                  <option value="frequent">Most Frequently Used</option>
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
             </div>
           </div>
         </div>
@@ -303,7 +317,7 @@ export default function App() {
           onClose={() => setActiveModal(null)} 
           onSave={(c) => { 
             setConfig(c); 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); 
+            setStorage('config', c); 
             setActiveModal(null); 
             showToast('Settings Saved'); 
           }} 
@@ -365,7 +379,7 @@ function SettingsModal({ config, onClose, onSave }) {
 
           {/* Display Preferences Section (Grouped UI Settings) */}
           <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-800 transition-colors">
-            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Display Preferences</h3>
+            <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Monitor size={14} /> Display Preferences</h3>
             
             <div className="space-y-5">
               {/* Interface Theme */}
