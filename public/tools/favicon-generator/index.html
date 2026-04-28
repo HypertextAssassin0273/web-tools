@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favicon Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8 flex flex-col items-center">
+    <div class="w-full max-w-2xl bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2">Favicon Resizer</h1>
+        <p class="mb-6 text-gray-400">Upload your original logo to instantly generate and download the required 32x32, 180x180, and 192x192 sizes.</p>
+        
+        <div class="mb-8 p-6 border-2 border-dashed border-gray-600 rounded-lg text-center hover:border-blue-500 transition-colors">
+            <input type="file" id="upload" accept="image/png, image/jpeg, image/webp" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2.5 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer">
+        </div>
+
+        <div id="outputs" class="grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
+            <!-- Dynamically populated sizes will appear here -->
+        </div>
+    </div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const outputs = document.getElementById('outputs');
+        const sizes = [32, 180, 192];
+
+        upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            outputs.classList.remove('hidden');
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    outputs.innerHTML = ''; // Clear previous renders
+                    
+                    sizes.forEach(size => {
+                        // Create canvas for resizing
+                        const canvas = document.createElement('canvas');
+                        canvas.width = canvas.height = size;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Enable smooth scaling
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+                        
+                        // Draw resized image
+                        ctx.drawImage(img, 0, 0, size, size);
+
+                        // Convert to data URI
+                        const dataUrl = canvas.toDataURL('image/png');
+
+                        // Build UI Elements
+                        const card = document.createElement('div');
+                        card.className = 'flex flex-col items-center bg-gray-700 p-5 rounded-lg shadow border border-gray-600';
+
+                        const sizeLabel = document.createElement('span');
+                        sizeLabel.className = 'text-sm font-semibold text-gray-300 mb-3';
+                        sizeLabel.textContent = `${size} x ${size}`;
+
+                        const previewContainer = document.createElement('div');
+                        previewContainer.className = 'w-32 h-32 flex items-center justify-center bg-black rounded border border-gray-800 mb-4 overflow-hidden pattern-dots';
+                        
+                        const preview = document.createElement('img');
+                        preview.src = dataUrl;
+                        // Cap visual size in preview to fit nicely, actual file remains accurate
+                        preview.style.width = size > 100 ? '100px' : `${size}px`;
+                        preview.style.height = size > 100 ? '100px' : `${size}px`;
+                        
+                        const downloadBtn = document.createElement('a');
+                        downloadBtn.href = dataUrl;
+                        downloadBtn.download = `favicon-${size}x${size}.png`;
+                        downloadBtn.textContent = 'Download';
+                        downloadBtn.className = 'w-full text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded transition-colors text-center cursor-pointer mt-auto';
+
+                        // Assemble
+                        previewContainer.appendChild(preview);
+                        card.appendChild(sizeLabel);
+                        card.appendChild(previewContainer);
+                        card.appendChild(downloadBtn);
+                        outputs.appendChild(card);
+                    });
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    </script>
+</body>
+</html>
