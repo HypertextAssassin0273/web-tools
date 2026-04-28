@@ -59,13 +59,23 @@ export default function App() {
       .catch(() => setTools([])); 
   }, []);
 
-  // --- Filtering (AND Logic) ---
+  // --- Extract Unique Tags for Suggestions ---
+  const allTags = [...new Set(tools.flatMap(t => t.tags || []))].sort();
+
+  // --- Strict Word-Boundary Filtering ---
   const filteredTools = tools.filter(tool => {
-    const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const tokens = searchQuery.trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return true;
     
-    const searchableString = `${tool.name} ${(tool.tags || []).join(' ')}`.toLowerCase();
-    return tokens.every(token => searchableString.includes(token));
+    return tokens.every(token => {
+      // Escape token for regex safety, then apply \b (word boundary)
+      const safeToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${safeToken}`, 'i'); 
+      
+      const nameMatch = regex.test(tool.name);
+      const tagMatch = (tool.tags || []).some(tag => regex.test(tag));
+      return nameMatch || tagMatch;
+    });
   });
 
   const showToast = (msg, type = 'success') => {
@@ -117,11 +127,17 @@ export default function App() {
               <Search size={20} className="text-gray-400 absolute left-3 top-2.5" />
               <input 
                 type="text" 
+                list="search-suggestions"
                 placeholder="Search tools, tags, or keywords..." 
                 className="w-full bg-gray-900 border border-gray-700 text-white placeholder-gray-400 text-sm rounded-lg pl-10 pr-4 py-2.5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {/* Native Autocomplete Suggestions */}
+              <datalist id="search-suggestions">
+                {tools.map(t => <option key={`name-${t.id}`} value={t.name} />)}
+                {allTags.map(tag => <option key={`tag-${tag}`} value={tag} />)}
+              </datalist>
             </div>
           </div>
         </div>
@@ -191,7 +207,7 @@ export default function App() {
           onClose={() => setActiveModal(null)} 
           onSuccess={(msg, updatedTools) => { 
             setActiveModal(null); 
-            if (updatedTools) setTools(updatedTools); // Optimistic UI update (no reload)
+            if (updatedTools) setTools(updatedTools); // Optimistic UI update
             showToast(msg); 
           }}
           showToast={showToast}
@@ -700,8 +716,13 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             <div>
               <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1">GitHub PAT (Session Auth)</label>
               <div className="relative">
+                {/* Honeypot to intercept Google Credential Manager Username Autofill */}
+                <input type="text" name="honeypot_username" autoComplete="username" tabIndex={-1} className="absolute w-0 h-0 opacity-0 overflow-hidden" aria-hidden="true" />
+                
                 <input 
                   type={showPat ? "text" : "password"} 
+                  name="pat_password"
+                  autoComplete="current-password"
                   value={formData.pat} 
                   onChange={e => setFormData({...formData, pat: e.target.value})} 
                   placeholder="Required to sync" 
