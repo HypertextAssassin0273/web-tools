@@ -64,7 +64,7 @@ export default function App() {
     const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return true;
     
-    const searchableString = `${tool.name} ${tool.description} ${(tool.tags || []).join(' ')}`.toLowerCase();
+    const searchableString = `${tool.name} ${(tool.tags || []).join(' ')}`.toLowerCase();
     return tokens.every(token => searchableString.includes(token));
   });
 
@@ -189,7 +189,11 @@ export default function App() {
           existingTools={tools}
           editTool={activeModal?.tool}
           onClose={() => setActiveModal(null)} 
-          onSuccess={(msg) => { setActiveModal(null); showToast(msg); setTimeout(() => window.location.reload(), 2000); }}
+          onSuccess={(msg, updatedTools) => { 
+            setActiveModal(null); 
+            if (updatedTools) setTools(updatedTools); // Optimistic UI update (no reload)
+            showToast(msg); 
+          }}
           showToast={showToast}
         />
       )}
@@ -252,16 +256,13 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   const folderInputRef = useRef(null);
 
   const handleAutoCommit = () => {
-    if (!formData.name || !formData.desc) {
-      showToast("Please provide a Name and Description first.", "error");
+    if (!formData.name) {
+      showToast("Please provide a Name first.", "error");
       return;
     }
     
-    let cleanDesc = formData.desc.replace(/\n+/g, ' — ');
-    if (cleanDesc.length > 60) cleanDesc = cleanDesc.substring(0, 60) + '...';
-    
-    const prefix = isEdit ? 'fix: update code and metadata for' : 'feat: publish';
-    setFormData(prev => ({ ...prev, commitMsg: `${prefix} ${formData.name}\n\n${cleanDesc}` }));
+    const prefix = isEdit ? 'fix: update tool' : 'feat: publish';
+    setFormData(prev => ({ ...prev, commitMsg: `${prefix} ${formData.name}` }));
   };
 
   const processTags = (input) => {
@@ -317,7 +318,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       return;
     }
 
-    // 3. Strict Entry Point Resolution & Staging (No more intermediate confirm modal)
+    // 3. Strict Entry Point Resolution & Staging
     const rootHtmlFiles = extractedFiles.filter(f => !f.path.includes('/') && f.path.toLowerCase().endsWith('.html'));
     const hasIndex = extractedFiles.some(f => !f.path.includes('/') && (f.path.toLowerCase() === 'index.html' || f.path.toLowerCase() === 'index.htm'));
 
@@ -504,29 +505,16 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
     return res.json();
   };
 
-  const pollDeployment = async (liveUrl) => {
-    setStatus({ active: true, msg: "Deploying... (This takes 1-2 minutes)", isError: false });
-    let retries = 0;
-    while (retries < 15) { 
-      try {
-        const res = await fetch(liveUrl, { cache: 'no-store' });
-        if (res.ok) return true;
-      } catch { /* ignore error */ }
-      await new Promise(r => setTimeout(r, 10000));
-      retries++;
-    }
-    throw new Error("Deployment polling timed out, but commit was successful.");
-  };
-
   const syncToGitHub = async (isDelete = false) => {
-    if (!formData.pat) return setStatus({ active: true, msg: "GitHub PAT required.", isError: true });
-    if (!isDelete && !formData.name) return setStatus({ active: true, msg: "Tool Name required.", isError: true });
-    if (!isEdit && !isDelete && files.length === 0) return setStatus({ active: true, msg: "Files required for new tools.", isError: true });
+    // Return with active: false to ensure action buttons are not locked during simple validation errors
+    if (!formData.pat) return setStatus({ active: false, msg: "GitHub PAT required.", isError: true });
+    if (!isDelete && !formData.name) return setStatus({ active: false, msg: "Tool Name required.", isError: true });
+    if (!isEdit && !isDelete && files.length === 0) return setStatus({ active: false, msg: "Files required for new tools.", isError: true });
 
     const slug = isEdit || isDelete ? editTool.id : formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     
     if (!isEdit && !isDelete && existingTools.some(t => t.id === slug)) {
-      return setStatus({ active: true, msg: "A tool with this name already exists. Please choose a unique name.", isError: true });
+      return setStatus({ active: false, msg: "A tool with this name already exists. Please choose a unique name.", isError: true });
     }
 
     try {
@@ -593,14 +581,10 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
       const newCommit = await ghFetch(`/git/commits`, { method: 'POST', body: JSON.stringify({ message: finalMsg, tree: newTree.sha, parents: [commitSha] }) });
       await ghFetch(`/git/refs/heads/${BRANCH}`, { method: 'PATCH', body: JSON.stringify({ sha: newCommit.sha }) });
 
-      if (!isDelete) {
-        const liveUrl = `https://${config.owner}.github.io/${config.repo}/tools/${slug}/index.html`;
-        await pollDeployment(liveUrl);
-      }
-
-      onSuccess(isDelete ? "Tool successfully removed!" : "Tool successfully published!");
+      onSuccess(isDelete ? "Tool removed! Live site will update in ~2 mins." : "Tool published! Live site will update in ~2 mins.", updatedTools);
     } catch (err) {
-      setStatus({ active: true, msg: err.message, isError: true });
+      // active: false ensures action buttons unlock when an error occurs
+      setStatus({ active: false, msg: err.message, isError: true });
     }
   };
 
@@ -635,6 +619,10 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
               ))}
               <input 
                 type="text" 
+                autoComplete="off"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                name="prevent-autofill-tags"
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value.replace(/[^a-zA-Z0-9\s,-]/g, ''))}
                 onKeyDown={handleTagKeyDown}
@@ -731,9 +719,9 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
             </div>
           </div>
 
-          {status.active && (
+          {(status.active || status.msg) && (
             <div className={`rounded-lg p-3 flex items-center gap-3 ${status.isError ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
-              {!status.isError && <Loader2 size={18} className="animate-spin" />}
+              {status.active && !status.isError && <Loader2 size={18} className="animate-spin" />}
               <p className="text-sm font-semibold">{status.msg}</p>
             </div>
           )}
