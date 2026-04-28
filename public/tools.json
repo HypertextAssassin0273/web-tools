@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "favicon-generator",
+    "name": "Favicon Generator",
+    "description": "",
+    "tags": [
+      "image"
+    ],
+    "url": "./tools/favicon-generator/index.html",
+    "avatar": {
+      "bg": "bg-indigo-50",
+      "text": "text-indigo-600"
+    }
+  }
+]
