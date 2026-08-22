@@ -11,5 +11,22 @@
       "bg": "bg-indigo-50",
       "text": "text-indigo-600"
     }
+  },
+  {
+    "id": "pdf-utilities",
+    "name": "PDF Utilities",
+    "description": "Instantly extract specific page ranges from any PDF or generate high-resolution cropped image thumbnails.",
+    "tags": [
+      "PDF",
+      "Slicer",
+      "Cropper",
+      "Utility",
+      "Image"
+    ],
+    "url": "./tools/pdf-utilities/index.html",
+    "avatar": {
+      "bg": "bg-indigo-50",
+      "text": "text-emerald-600"
+    }
   }
 ]

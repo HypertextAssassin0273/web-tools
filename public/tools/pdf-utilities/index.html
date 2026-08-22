@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Slicer & Cropper</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Cropper.js CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+  <style>
+    /* Minimal overrides for Cropper.js in dark mode */
+    .cropper-view-box, .cropper-face { border-radius: 0; }
+    .cropper-container { background-color: #1f2937 !important; overflow: hidden; border-radius: 0.5rem; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8 flex flex-col items-center">
+  <div class="w-full max-w-3xl bg-gray-800 p-8 rounded-xl shadow-2xl border border-gray-700">
+    <h1 class="text-3xl font-bold mb-2">PDF Slicer & Cropper</h1>
+    <p class="mb-6 text-gray-400">Upload your PDF to extract specific pages or crop high-resolution thumbnails.</p>
+
+    <!-- File Upload -->
+    <div class="mb-8 p-6 border-2 border-dashed border-gray-600 rounded-lg text-center hover:border-blue-500 transition-colors">
+      <input type="file" id="file-input" accept="application/pdf" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2.5 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer">
+    </div>
+
+    <!-- Workspace -->
+    <div id="workspace" class="hidden space-y-8">
+      
+      <!-- Extract Sub-PDF -->
+      <div class="bg-gray-700 p-6 rounded-lg border border-gray-600 shadow-sm">
+        <h2 class="text-xl font-semibold mb-4 text-gray-200">1. Extract Sub-PDF</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <input type="number" id="page-start" placeholder="Start Page (e.g. 1)" min="1" class="bg-gray-800 border border-gray-600 text-white text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:outline-none">
+          <input type="number" id="page-end" placeholder="End Page (e.g. 3)" min="1" class="bg-gray-800 border border-gray-600 text-white text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:outline-none">
+          <input type="text" id="pdf-name" placeholder="Filename (e.g. sub-pdf)" class="bg-gray-800 border border-gray-600 text-white text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:outline-none">
+        </div>
+        <button id="btn-extract-pdf" class="w-full sm:w-auto text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white py-2 px-6 rounded transition-colors">Download Sub-PDF</button>
+      </div>
+
+      <!-- Crop Thumbnail -->
+      <div class="bg-gray-700 p-6 rounded-lg border border-gray-600 shadow-sm">
+        <h2 class="text-xl font-semibold mb-4 text-gray-200">2. Crop Thumbnail</h2>
+        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+          <input type="number" id="render-page" placeholder="Page to render (e.g. 1)" min="1" class="flex-1 bg-gray-800 border border-gray-600 text-white text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:outline-none">
+          <button id="btn-render" class="text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white py-2 px-6 rounded transition-colors">Load Page</button>
+        </div>
+        
+        <div id="cropper-wrapper" class="hidden mb-6 border border-gray-600 rounded-lg overflow-hidden bg-gray-900">
+          <img id="crop-image" src="" alt="Page Render" class="max-w-full">
+        </div>
+        
+        <div id="crop-actions" class="hidden flex-col sm:flex-row gap-4">
+          <input type="text" id="img-name" placeholder="Filename (e.g. thumbnail)" class="flex-1 bg-gray-800 border border-gray-600 text-white text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:outline-none">
+          <button id="btn-export-img" class="text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white py-2 px-6 rounded transition-colors">Download Thumbnail</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PDF.js, PDF-lib, and Cropper.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
