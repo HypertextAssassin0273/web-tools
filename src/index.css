@@ -1,4 +1,7 @@
 @import "tailwindcss";
 
+/* Enable manual class-based dark mode for Tailwind v4 */
+@variant dark (&:where(.dark, .dark *));
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
