@@ -6,10 +6,17 @@
   <title>PDF Utilities</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
   
-  <!-- Dynamic Cache Buster for CSS -->
+  <!-- Safe Cache Buster for CSS -->
   <script>
-    const qs = window.location.search || '?v=' + new Date().getTime();
-    document.write('<link rel="stylesheet" href="style.css' + qs + '">');
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const version = params.get('v') || Date.now();
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'style.css?v=' + version;
+      document.head.appendChild(link);
+      window.APP_VERSION = version; // Store globally for the JS loader below
+    })();
   </script>
 </head>
 <body>
@@ -77,9 +84,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
   
-  <!-- Dynamic Cache Buster for JS -->
+  <!-- Safe Cache Buster for JS -->
   <script>
-    document.write('<script src="app.js' + qs + '"><\\/script>');
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'app.js?v=' + window.APP_VERSION;
+      document.body.appendChild(script);
+    })();
   </script>
 </body>
 </html>
