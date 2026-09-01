@@ -12,6 +12,7 @@ const UI = {
   toolbar: document.getElementById('toolbar'),
   btnExtract: document.getElementById('btn-extract'),
   btnCrop: document.getElementById('btn-crop'),
+  btnSplit: document.getElementById('btn-split'),
   btnClear: document.getElementById('btn-clear'),
   btnReset: document.getElementById('btn-reset'),
   selCount: document.getElementById('selection-count'),
@@ -22,6 +23,8 @@ const UI = {
   splitModal: document.getElementById('split-modal'),
   splitImg: document.getElementById('split-image')
 };
+
+// --- CORE FUNCTIONS ---
 
 function resetWorkspace() {
   if (cropper) cropper.destroy();
@@ -57,6 +60,8 @@ function downloadFile(blob, filename) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+// --- EVENT LISTENERS ---
 
 UI.btnReset.addEventListener('click', resetWorkspace);
 
@@ -128,6 +133,7 @@ UI.btnClear.addEventListener('click', () => {
   updateToolbar();
 });
 
+// --- 1. EXTRACT FULL & SPLIT PAGES ---
 UI.btnExtract.addEventListener('click', async () => {
   const selectedCards = document.querySelectorAll('.page-card.selected');
   if (selectedCards.length === 0) return;
@@ -169,6 +175,7 @@ UI.btnExtract.addEventListener('click', async () => {
   downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'extracted-brochure.pdf');
 });
 
+// --- 2. LOCALIZED PDF SPLIT LOGIC ---
 async function openSplitModal(card) {
   activeSplitCard = card;
   const pageNum = parseInt(card.dataset.pageIndex) + 1;
@@ -190,25 +197,27 @@ async function openSplitModal(card) {
     background: false,
     zoomable: false,
     ready: function () {
+      // getCanvasData() returns the actual on-screen dimensions of the image 
+      const canvasData = this.cropper.getCanvasData();
+      let left = canvasData.left;
+      let top = canvasData.top;
+      let width = canvasData.width / 2; // Default to 50% split
+      let height = canvasData.height;   
+      
+      // Accurately map stored ratios back to exact screen pixels
       if (card.dataset.cropRatioX) {
-         // Accurately restore exact state using natural image coordinates
-         const imageData = this.cropper.getImageData();
-         this.cropper.setData({
-            x: imageData.naturalWidth * parseFloat(card.dataset.cropRatioX),
-            y: imageData.naturalHeight * parseFloat(card.dataset.cropRatioY),
-            width: imageData.naturalWidth * parseFloat(card.dataset.cropRatioW),
-            height: imageData.naturalHeight * parseFloat(card.dataset.cropRatioH)
-         });
-      } else {
-         // Default to 50% left horizontal split
-         const containerData = this.cropper.getContainerData();
-         this.cropper.setCropBoxData({
-           left: 0,
-           top: 0,
-           width: containerData.width / 2,
-           height: containerData.height
-         });
+         left = canvasData.left + (canvasData.width * parseFloat(card.dataset.cropRatioX));
+         width = canvasData.width * parseFloat(card.dataset.cropRatioW);
+         top = canvasData.top + (canvasData.height * parseFloat(card.dataset.cropRatioY || 0));
+         height = canvasData.height * parseFloat(card.dataset.cropRatioH || 1);
       }
+
+      this.cropper.setCropBoxData({
+        left: left,
+        top: top,
+        width: width,
+        height: height
+      });
     }
   });
 }
@@ -258,6 +267,7 @@ document.getElementById('btn-save-split').addEventListener('click', async () => 
   activeSplitCard = null;
 });
 
+// --- 3. CROP THUMBNAIL IMAGE ---
 UI.btnCrop.addEventListener('click', async () => {
   const selected = document.querySelector('.page-card.selected');
   if (!selected) return;
