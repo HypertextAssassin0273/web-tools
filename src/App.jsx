@@ -267,7 +267,7 @@ export default function App() {
                 onClick={() => handleToolOpen(tool)}
                 className={`group block bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl ${cardPaddingClass} cursor-pointer relative hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-100 dark:hover:shadow-black/50 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-300 flex flex-col h-full`}
               >
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute top-2 right-2 flex gap-1 z-20">
+                <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity absolute top-2 right-2 flex gap-1 z-20">
                   <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'publish', tool }); }} className="p-1.5 bg-white/90 dark:bg-gray-800/90 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400 shadow-sm border border-gray-100 dark:border-gray-700 transition-colors" title="Edit">
                     <Edit2 size={14} />
                   </button>
