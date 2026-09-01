@@ -33,8 +33,21 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 }
 .page-card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
 .page-card.selected { border-color: var(--primary); background: #f0f8ff; }
-.page-card canvas { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; pointer-events: none; }
+
+/* Fixed canvas styling to prevent stretching after crops */
+.page-card canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; border: 1px solid var(--border); border-radius: 4px; pointer-events: none; }
 .page-card .page-label { text-align: center; margin-top: 8px; font-size: 0.85rem; font-weight: 600; color: #666; pointer-events: none; }
+
+/* Card Hover Split Button */
+.split-btn {
+  position: absolute; top: 12px; right: 12px;
+  background: var(--primary); color: white;
+  border: none; border-radius: 6px; padding: 6px 8px;
+  cursor: pointer; display: none; z-index: 10;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.page-card.selected:hover .split-btn { display: flex; align-items: center; justify-content: center; }
+.split-btn:hover { background: var(--primary-hover); }
 
 /* Crop Modal */
 .crop-modal { 
@@ -48,14 +61,8 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .crop-body img { max-width: 100%; max-height: 100%; }
 
 /* Restrict Split Modal to Horizontal Sliding Only */
-#split-modal .cropper-point.n,
-#split-modal .cropper-point.s,
-#split-modal .cropper-point.ne,
-#split-modal .cropper-point.nw,
-#split-modal .cropper-point.se,
-#split-modal .cropper-point.sw,
-#split-modal .cropper-line.t,
-#split-modal .cropper-line.b,
-#split-modal .cropper-center {
+#split-modal .cropper-point.n, #split-modal .cropper-point.s, #split-modal .cropper-point.ne, 
+#split-modal .cropper-point.nw, #split-modal .cropper-point.se, #split-modal .cropper-point.sw, 
+#split-modal .cropper-line.t, #split-modal .cropper-line.b, #split-modal .cropper-center {
   display: none !important;
 }

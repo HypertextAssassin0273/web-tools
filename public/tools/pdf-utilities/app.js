@@ -1,7 +1,8 @@
 let currentFile = null; 
 let currentPdfDoc = null;
 let cropper = null;
-let splitCropper = null; // New cropper instance for PDF splitting
+let splitCropper = null; 
+let activeSplitCard = null; // Tracks which card is actively being split
 
 const UI = {
   uploadZone: document.getElementById('upload-zone'),
@@ -11,7 +12,6 @@ const UI = {
   toolbar: document.getElementById('toolbar'),
   btnExtract: document.getElementById('btn-extract'),
   btnCrop: document.getElementById('btn-crop'),
-  btnSplit: document.getElementById('btn-split'), // New Split Button
   btnClear: document.getElementById('btn-clear'),
   btnReset: document.getElementById('btn-reset'),
   selCount: document.getElementById('selection-count'),
@@ -32,6 +32,7 @@ function resetWorkspace() {
   
   currentFile = null;
   currentPdfDoc = null;
+  activeSplitCard = null;
   
   UI.grid.innerHTML = '';
   UI.fileInput.value = ''; 
@@ -48,7 +49,6 @@ function updateToolbar() {
   UI.btnExtract.disabled = selected.length === 0;
   UI.btnClear.disabled = selected.length === 0;
   UI.btnCrop.disabled = selected.length !== 1;
-  UI.btnSplit.disabled = selected.length !== 1; // Requires exactly 1 page
 }
 
 function downloadFile(blob, filename) {
@@ -96,8 +96,26 @@ UI.fileInput.addEventListener('change', async (e) => {
     const card = document.createElement('div');
     card.className = 'page-card';
     card.dataset.pageIndex = i - 1; 
-    card.innerHTML = `<div class="page-label">Page ${i}</div>`;
-    card.insertBefore(canvas, card.firstChild);
+    
+    card.appendChild(canvas);
+    
+    const label = document.createElement('div');
+    label.className = 'page-label';
+    label.textContent = `Page ${i}`;
+    card.appendChild(label);
+
+    // Hover Split Button
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'split-btn';
+    splitBtn.title = "Split this page";
+    splitBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>';
+    
+    splitBtn.addEventListener('click', async (btnEvent) => {
+      btnEvent.stopPropagation(); // Don't toggle selection when clicking split
+      await openSplitModal(card);
+    });
+    
+    card.appendChild(splitBtn);
     
     card.addEventListener('click', () => {
       card.classList.toggle('selected');
@@ -115,7 +133,7 @@ UI.btnClear.addEventListener('click', () => {
   updateToolbar();
 });
 
-// --- 1. EXTRACT FULL PAGES ---
+// --- 1. EXTRACT FULL & SPLIT PAGES ---
 UI.btnExtract.addEventListener('click', async () => {
   const selectedCards = document.querySelectorAll('.page-card.selected');
   if (selectedCards.length === 0) return;
@@ -130,21 +148,35 @@ UI.btnExtract.addEventListener('click', async () => {
   const pageIndices = Array.from(selectedCards).map(card => parseInt(card.dataset.pageIndex));
   
   const copiedPages = await newPdf.copyPages(originalPdf, pageIndices);
-  copiedPages.forEach(page => newPdf.addPage(page));
+  
+  // Iterate and apply crops to any pages that were marked for splitting
+  selectedCards.forEach((card, idx) => {
+    const copiedPage = copiedPages[idx];
+    
+    if (card.dataset.cropRatioX && card.dataset.cropRatioW) {
+      const ratioX = parseFloat(card.dataset.cropRatioX);
+      const ratioW = parseFloat(card.dataset.cropRatioW);
+      
+      const { x: boxX, y: boxY, width, height } = copiedPage.getMediaBox();
+      const cropX = boxX + (width * ratioX);
+      const cropW = width * ratioW;
+      
+      copiedPage.setCropBox(cropX, boxY, cropW, height);
+    }
+    
+    newPdf.addPage(copiedPage);
+  });
 
   const pdfBytes = await newPdf.save();
-  downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'extracted-pages.pdf');
+  downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'extracted-brochure.pdf');
 });
 
-// --- 2. SPLIT PDF PAGE (NEW FEATURE) ---
-UI.btnSplit.addEventListener('click', async () => {
-  const selected = document.querySelector('.page-card.selected');
-  if (!selected) return;
-
-  const pageNum = parseInt(selected.dataset.pageIndex) + 1;
+// --- 2. LOCALIZED PDF SPLIT LOGIC ---
+async function openSplitModal(card) {
+  activeSplitCard = card;
+  const pageNum = parseInt(card.dataset.pageIndex) + 1;
   const page = await currentPdfDoc.getPage(pageNum);
   
-  // Render high quality for visual selection
   const viewport = page.getViewport({ scale: 2.0 });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
@@ -161,17 +193,24 @@ UI.btnSplit.addEventListener('click', async () => {
     background: false,
     zoomable: false,
     ready: function () {
-      // Force initial crop box to exactly the left 50% of the page
-      const containerData = this.cropper.getContainerData();
+      const imageData = this.cropper.getImageData();
+      let left = imageData.left;
+      let width = imageData.width / 2; // Default to 50% split
+      
+      // Restore previous split boundary if user re-opens it
+      if (card.dataset.cropRatioX) {
+         left = imageData.left + (imageData.width * parseFloat(card.dataset.cropRatioX));
+         width = imageData.width * parseFloat(card.dataset.cropRatioW);
+      }
+
       this.cropper.setCropBoxData({
-        left: 0,
-        top: 0,
-        width: containerData.width / 2,
-        height: containerData.height
+        left: left,
+        top: imageData.top,
+        width: width,
+        height: imageData.height
       });
     },
     cropmove: function () {
-      // Physically lock the crop box height to 100% so it can only slide horizontally
       const containerData = this.cropper.getContainerData();
       this.cropper.setCropBoxData({
         top: 0,
@@ -179,50 +218,49 @@ UI.btnSplit.addEventListener('click', async () => {
       });
     }
   });
-});
+}
 
 document.getElementById('btn-cancel-split').addEventListener('click', () => {
   UI.splitModal.style.display = 'none';
   if (splitCropper) splitCropper.destroy();
+  activeSplitCard = null;
 });
 
 document.getElementById('btn-save-split').addEventListener('click', async () => {
-  if (!splitCropper) return;
+  if (!splitCropper || !activeSplitCard) return;
 
-  // Get crop coordinates relative to the natural image
   const cropData = splitCropper.getData(true);
   const imageData = splitCropper.getImageData();
 
-  // Calculate percentages (0.0 to 1.0) for where the crop starts and ends horizontally
   const ratioX = cropData.x / imageData.naturalWidth;
   const ratioW = cropData.width / imageData.naturalWidth;
 
-  const selected = document.querySelector('.page-card.selected');
-  const pageIndex = parseInt(selected.dataset.pageIndex);
+  // Save ratios to the DOM element for the final export step
+  activeSplitCard.dataset.cropRatioX = ratioX;
+  activeSplitCard.dataset.cropRatioW = ratioW;
 
-  const { PDFDocument } = PDFLib;
-  const pristineBlob = currentFile.slice(0, currentFile.size);
-  const freshBuffer = await pristineBlob.arrayBuffer();
-
-  const originalPdf = await PDFDocument.load(freshBuffer);
-  const newPdf = await PDFDocument.create();
-
-  // Copy only the single page we are splitting
-  const [copiedPage] = await newPdf.copyPages(originalPdf, [pageIndex]);
-  const { x: boxX, y: boxY, width, height } = copiedPage.getMediaBox();
-
-  // Apply the horizontal slice to the PDF's native coordinates
-  const cropX = boxX + (width * ratioX);
-  const cropW = width * ratioW;
+  // Visually redraw the thumbnail on the card to reflect the split
+  const pageNum = parseInt(activeSplitCard.dataset.pageIndex) + 1;
+  const page = await currentPdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 0.5 });
   
-  // Set the new boundary in the PDF document
-  copiedPage.setCropBox(cropX, boxY, cropW, height);
-  newPdf.addPage(copiedPage);
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = viewport.width;
+  tempCanvas.height = viewport.height;
+  await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport }).promise;
 
-  const pdfBytes = await newPdf.save();
-  downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'split-page.pdf');
+  const cardCanvas = activeSplitCard.querySelector('canvas');
+  cardCanvas.width = viewport.width * ratioW;
+  cardCanvas.height = viewport.height;
+  
+  cardCanvas.getContext('2d').drawImage(
+    tempCanvas,
+    viewport.width * ratioX, 0, viewport.width * ratioW, viewport.height,
+    0, 0, cardCanvas.width, cardCanvas.height
+  );
 
   UI.splitModal.style.display = 'none';
+  activeSplitCard = null;
 });
 
 // --- 3. CROP THUMBNAIL IMAGE ---
