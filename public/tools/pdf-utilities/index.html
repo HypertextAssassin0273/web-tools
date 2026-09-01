@@ -15,7 +15,8 @@
       <div class="toolbar" id="toolbar" style="display: none;">
         <span id="selection-count">0 pages selected</span>
         <button id="btn-clear" class="btn btn-secondary" disabled>Clear</button>
-        <button id="btn-extract" class="btn btn-primary" disabled>Export Selected</button>
+        <button id="btn-extract" class="btn btn-primary" disabled>Export Full Pages</button>
+        <button id="btn-split" class="btn btn-primary" disabled>Split Page to PDF</button>
         <button id="btn-crop" class="btn btn-secondary" disabled>Crop Thumbnail</button>
         <button id="btn-reset" class="btn btn-secondary" style="margin-left: 20px; color: #d32f2f; border-color: #d32f2f;">✕ Close PDF</button>
       </div>
@@ -48,6 +49,20 @@
     </div>
     <div class="crop-body">
       <img id="crop-image" src="" alt="Crop target">
+    </div>
+  </div>
+
+  <!-- Fullscreen PDF Split Modal -->
+  <div class="crop-modal" id="split-modal" style="display: none;">
+    <div class="crop-header">
+      <h2>Split PDF Page (Vertical locked to 100%)</h2>
+      <div class="crop-actions">
+        <button id="btn-cancel-split" class="btn btn-secondary">Cancel</button>
+        <button id="btn-save-split" class="btn btn-primary">Export Split PDF</button>
+      </div>
+    </div>
+    <div class="crop-body">
+      <img id="split-image" src="" alt="Split target">
     </div>
   </div>
 
