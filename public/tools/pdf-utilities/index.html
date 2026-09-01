@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PDF Utilities</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
-  <link rel="stylesheet" href="style.css">
+  
+  <!-- Dynamic Cache Buster for CSS -->
+  <script>
+    const qs = window.location.search || '?v=' + new Date().getTime();
+    document.write('<link rel="stylesheet" href="style.css' + qs + '">');
+  </script>
 </head>
 <body>
   
@@ -54,7 +59,7 @@
   <!-- Fullscreen PDF Split Modal -->
   <div class="crop-modal" id="split-modal" style="display: none;">
     <div class="crop-header">
-      <h2>Split PDF Page (Vertical locked to 100%)</h2>
+      <h2>Split / Crop PDF Page</h2>
       <div class="crop-actions">
         <button id="btn-cancel-split" class="btn btn-secondary">Cancel</button>
         <button id="btn-save-split" class="btn btn-primary">Apply Split to Page</button>
@@ -71,6 +76,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-  <script src="app.js"></script>
+  
+  <!-- Dynamic Cache Buster for JS -->
+  <script>
+    document.write('<script src="app.js' + qs + '"><\\/script>');
+  </script>
 </body>
 </html>
