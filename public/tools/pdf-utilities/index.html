@@ -6,6 +6,9 @@
   <title>PDF Utilities</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
   
+  <!-- Hide body until CSS is fully loaded -->
+  <style>body { opacity: 0; transition: opacity 0.15s ease-in; }</style>
+
   <!-- Safe Cache Buster for CSS -->
   <script>
     (function() {
@@ -14,6 +17,9 @@
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = 'style.css?v=' + version;
+      // Unhide the body once the CSS has successfully loaded
+      link.onload = function() { document.body.style.opacity = '1'; };
+      link.onerror = function() { document.body.style.opacity = '1'; }; 
       document.head.appendChild(link);
       window.APP_VERSION = version; // Store globally for the JS loader below
     })();
