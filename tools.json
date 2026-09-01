@@ -1,0 +1,32 @@
+[
+  {
+    "id": "favicon-generator",
+    "name": "Favicon Generator",
+    "description": "Upload your original logo to instantly generate required standard favicon sizes.",
+    "tags": [
+      "image"
+    ],
+    "url": "./tools/favicon-generator/index.html",
+    "avatar": {
+      "bg": "bg-indigo-50",
+      "text": "text-indigo-600"
+    }
+  },
+  {
+    "id": "pdf-utilities",
+    "name": "PDF Utilities",
+    "description": "Instantly extract specific page ranges from any PDF or generate high-resolution cropped image thumbnails.",
+    "tags": [
+      "PDF",
+      "Slicer",
+      "Cropper",
+      "Utility",
+      "Image"
+    ],
+    "url": "./tools/pdf-utilities/index.html",
+    "avatar": {
+      "bg": "bg-indigo-50",
+      "text": "text-emerald-600"
+    }
+  }
+]

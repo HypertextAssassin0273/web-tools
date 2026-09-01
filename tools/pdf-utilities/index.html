@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Utilities</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+  
+  <!-- Hide body until CSS is fully loaded -->
+  <style>body { opacity: 0; transition: opacity 0.15s ease-in; }</style>
+
+  <!-- Safe Cache Buster for CSS -->
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const version = params.get('v') || Date.now();
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'style.css?v=' + version;
+      // Unhide the body once the CSS has successfully loaded
+      link.onload = function() { document.body.style.opacity = '1'; };
+      link.onerror = function() { document.body.style.opacity = '1'; }; 
+      document.head.appendChild(link);
+      window.APP_VERSION = version; // Store globally for the JS loader below
+    })();
+  </script>
+</head>
+<body>
+  
+  <div class="app-container">
+    <header class="app-header">
+      <h1>PDF Slicer & Cropper</h1>
+      <div class="toolbar" id="toolbar" style="display: none;">
+        <span id="selection-count">0 pages selected</span>
+        <button id="btn-clear" class="btn btn-secondary" disabled>Clear</button>
+        <button id="btn-extract" class="btn btn-primary" disabled>Export Selected</button>
+        <button id="btn-crop" class="btn btn-secondary" disabled>Crop Thumbnail</button>
+        <button id="btn-reset" class="btn btn-secondary" style="margin-left: 20px; color: #d32f2f; border-color: #d32f2f;">✕ Close PDF</button>
+      </div>
+    </header>
+
+    <!-- Upload State -->
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept="application/pdf" hidden>
+      <label for="file-input" class="upload-label">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m14-7-5-5-5 5m5-5v12"/></svg>
+        <span>Drag & Drop PDF or Click to Upload</span>
+      </label>
+    </div>
+
+    <!-- Workspace State -->
+    <div class="workspace" id="workspace" style="display: none;">
+      <p class="helper-text">Drag to reorder. Click to select pages for extraction or cropping.</p>
+      <div class="pages-grid" id="pages-grid"></div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Image Crop Modal -->
+  <div class="crop-modal" id="crop-modal" style="display: none;">
+    <div class="crop-header">
+      <h2>Crop Thumbnail Image</h2>
+      <div class="crop-actions">
+        <button id="btn-cancel-crop" class="btn btn-secondary">Cancel</button>
+        <button id="btn-save-crop" class="btn btn-primary">Save Thumbnail (.webp)</button>
+      </div>
+    </div>
+    <div class="crop-body">
+      <img id="crop-image" src="" alt="Crop target">
+    </div>
+  </div>
+
+  <!-- Fullscreen PDF Split Modal -->
+  <div class="crop-modal" id="split-modal" style="display: none;">
+    <div class="crop-header">
+      <h2>Split / Crop PDF Page</h2>
+      <div class="crop-actions">
+        <button id="btn-cancel-split" class="btn btn-secondary">Cancel</button>
+        <button id="btn-save-split" class="btn btn-primary">Apply Split to Page</button>
+      </div>
+    </div>
+    <div class="crop-body">
+      <img id="split-image" src="" alt="Split target">
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  
+  <!-- Safe Cache Buster for JS -->
+  <script>
+    (function() {
+      const script = document.createElement('script');
+      script.src = 'app.js?v=' + window.APP_VERSION;
+      document.body.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
