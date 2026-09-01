@@ -1,4 +1,4 @@
-let currentFileBuffer = null;
+let currentFile = null; 
 let currentPdfDoc = null;
 let cropper = null;
 
@@ -10,30 +10,54 @@ const UI = {
   toolbar: document.getElementById('toolbar'),
   btnExtract: document.getElementById('btn-extract'),
   btnCrop: document.getElementById('btn-crop'),
+  btnClear: document.getElementById('btn-clear'),
+  btnReset: document.getElementById('btn-reset'),
   selCount: document.getElementById('selection-count'),
   cropModal: document.getElementById('crop-modal'),
   cropImg: document.getElementById('crop-image')
 };
 
-// 1. Handle Upload
+function resetWorkspace() {
+  if (cropper) cropper.destroy();
+  if (currentPdfDoc) currentPdfDoc.destroy();
+  
+  currentFile = null;
+  currentPdfDoc = null;
+  
+  UI.grid.innerHTML = '';
+  UI.fileInput.value = ''; 
+  
+  UI.workspace.style.display = 'none';
+  UI.toolbar.style.display = 'none';
+  UI.uploadZone.style.display = 'block';
+  updateToolbar();
+}
+
+UI.btnReset.addEventListener('click', resetWorkspace);
+
 UI.fileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
+  if (currentPdfDoc) resetWorkspace();
+
+  // Store the actual file object, not the ArrayBuffer
+  currentFile = file;
+
   UI.uploadZone.style.display = 'none';
   UI.workspace.style.display = 'block';
   UI.toolbar.style.display = 'flex';
-  UI.grid.innerHTML = '<p>Rendering pages...</p>';
+  UI.grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Rendering pages...</p>';
 
-  currentFileBuffer = await file.arrayBuffer();
-  currentPdfDoc = await pdfjsLib.getDocument(currentFileBuffer).promise;
+  // Use Object URL to prevent pdf.js from detaching the memory buffer
+  const fileUrl = URL.createObjectURL(file);
+  currentPdfDoc = await pdfjsLib.getDocument(fileUrl).promise;
   
   UI.grid.innerHTML = '';
   
-  // Render thumbnails
   for (let i = 1; i <= currentPdfDoc.numPages; i++) {
     const page = await currentPdfDoc.getPage(i);
-    const viewport = page.getViewport({ scale: 0.5 }); // Low res for grid
+    const viewport = page.getViewport({ scale: 0.5 }); 
     
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -44,7 +68,7 @@ UI.fileInput.addEventListener('change', async (e) => {
 
     const card = document.createElement('div');
     card.className = 'page-card';
-    card.dataset.pageIndex = i - 1; // 0-based for pdf-lib
+    card.dataset.pageIndex = i - 1; 
     card.innerHTML = `<div class="page-label">Page ${i}</div>`;
     card.insertBefore(canvas, card.firstChild);
     
@@ -56,7 +80,6 @@ UI.fileInput.addEventListener('change', async (e) => {
     UI.grid.appendChild(card);
   }
 
-  // Initialize Drag & Drop Sorting
   new Sortable(UI.grid, { animation: 150 });
 });
 
@@ -64,19 +87,28 @@ function updateToolbar() {
   const selected = document.querySelectorAll('.page-card.selected');
   UI.selCount.textContent = `${selected.length} page(s) selected`;
   UI.btnExtract.disabled = selected.length === 0;
-  UI.btnCrop.disabled = selected.length !== 1; // Crop requires exactly 1 page
+  UI.btnClear.disabled = selected.length === 0;
+  UI.btnCrop.disabled = selected.length !== 1;
 }
 
-// 2. Extract Sub-PDF
+// Clear Selections
+UI.btnClear.addEventListener('click', () => {
+  document.querySelectorAll('.page-card.selected').forEach(card => card.classList.remove('selected'));
+  updateToolbar();
+});
+
+// Extract Sub-PDF
 UI.btnExtract.addEventListener('click', async () => {
   const selectedCards = document.querySelectorAll('.page-card.selected');
   if (selectedCards.length === 0) return;
 
   const { PDFDocument } = PDFLib;
-  const originalPdf = await PDFDocument.load(currentFileBuffer);
+  
+  // Generate a fresh ArrayBuffer on demand to avoid the "detached" error
+  const freshBuffer = await currentFile.arrayBuffer();
+  const originalPdf = await PDFDocument.load(freshBuffer);
   const newPdf = await PDFDocument.create();
 
-  // SortableJS physically moves DOM nodes, so iterating the DOM gives the correct new order!
   const pageIndices = Array.from(selectedCards).map(card => parseInt(card.dataset.pageIndex));
   
   const copiedPages = await newPdf.copyPages(originalPdf, pageIndices);
@@ -86,7 +118,7 @@ UI.btnExtract.addEventListener('click', async () => {
   downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'extracted-brochure.pdf');
 });
 
-// 3. Open Crop Modal
+// Open Crop Modal
 UI.btnCrop.addEventListener('click', async () => {
   const selected = document.querySelector('.page-card.selected');
   if (!selected) return;
@@ -94,7 +126,6 @@ UI.btnCrop.addEventListener('click', async () => {
   const pageNum = parseInt(selected.dataset.pageIndex) + 1;
   const page = await currentPdfDoc.getPage(pageNum);
   
-  // Render at 2.5x scale for high-res cropping
   const viewport = page.getViewport({ scale: 2.5 });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
@@ -109,11 +140,11 @@ UI.btnCrop.addEventListener('click', async () => {
     viewMode: 1,
     autoCropArea: 0.6,
     background: false,
-    zoomable: false // Prevents mouse wheel scrolling issues
+    zoomable: false 
   });
 });
 
-// 4. Crop Actions
+// Crop Actions
 document.getElementById('btn-cancel-crop').addEventListener('click', () => {
   UI.cropModal.style.display = 'none';
   if (cropper) cropper.destroy();

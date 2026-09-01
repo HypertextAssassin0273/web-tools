@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PDF Workspace</title>
+  <title>PDF Utilities</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -11,11 +11,13 @@
   
   <div class="app-container">
     <header class="app-header">
-      <h1>PDF Equipment Extractor</h1>
+      <h1>PDF Slicer & Cropper</h1>
       <div class="toolbar" id="toolbar" style="display: none;">
         <span id="selection-count">0 pages selected</span>
-        <button id="btn-extract" class="btn btn-primary" disabled>Export Selected as PDF</button>
-        <button id="btn-crop" class="btn btn-secondary" disabled>Crop 1 Page for Thumbnail</button>
+        <button id="btn-clear" class="btn btn-secondary" disabled>Clear</button>
+        <button id="btn-extract" class="btn btn-primary" disabled>Export Selected</button>
+        <button id="btn-crop" class="btn btn-secondary" disabled>Crop Thumbnail</button>
+        <button id="btn-reset" class="btn btn-secondary" style="margin-left: 20px; color: #d32f2f; border-color: #d32f2f;">✕ Close PDF</button>
       </div>
     </header>
 
