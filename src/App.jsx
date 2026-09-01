@@ -68,6 +68,8 @@ export default function App() {
   const [activeModal, setActiveModal] = useState(null);
   const [previewTool, setPreviewTool] = useState(null);
   const [toast, setToast] = useState({ show: false, msg: '', type: 'success' });
+  const [toolVersion, setToolVersion] = useState(Date.now());
+
 
   // --- Theme Application Effect ---
   useEffect(() => {
@@ -332,13 +334,14 @@ export default function App() {
           onSuccess={(msg, updatedTools) => { 
             setActiveModal(null); 
             if (updatedTools) setTools(updatedTools);
+            setToolVersion(Date.now());
             showToast(msg); 
           }}
           showToast={showToast}
         />
       )}
       {activeModal === 'preview' && previewTool && (
-        <PreviewPane tool={previewTool} onClose={() => setActiveModal(null)} />
+        <PreviewPane tool={previewTool} onClose={() => setActiveModal(null)} version={toolVersion} />
       )}
 
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 z-[110] ${toast.show ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-8 opacity-0 scale-95'} ${toast.type === 'error' ? 'bg-red-600 dark:bg-red-700 text-white' : 'bg-gray-900 dark:bg-gray-800 text-white border border-gray-700'}`}>
@@ -980,7 +983,7 @@ function PublishModal({ config, existingTools, editTool, onClose, onSuccess, sho
   );
 }
 
-function PreviewPane({ tool, onClose }) {
+function PreviewPane({ tool, onClose, version }) {
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-gray-950 animate-in slide-in-from-right-full duration-300 transition-colors">
       <div className="h-14 bg-gray-900 dark:bg-black border-b border-gray-800 dark:border-gray-900 flex items-center justify-between px-4 text-white shadow-xl relative z-10 transition-colors">
@@ -1003,7 +1006,7 @@ function PreviewPane({ tool, onClose }) {
         
       </div>
       <div className="flex-grow bg-white dark:bg-gray-900 w-full h-full relative transition-colors">
-        <iframe src={tool.url} className="absolute inset-0 w-full h-full border-none" title={tool.name} />
+        <iframe key={version} src={`${tool.url}?v=${version}`} className="absolute inset-0 w-full h-full border-none" title={tool.name} />
       </div>
     </div>
   );
