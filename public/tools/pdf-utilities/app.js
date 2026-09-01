@@ -17,6 +17,8 @@ const UI = {
   cropImg: document.getElementById('crop-image')
 };
 
+// --- CORE FUNCTIONS ---
+
 function resetWorkspace() {
   if (cropper) cropper.destroy();
   if (currentPdfDoc) currentPdfDoc.destroy();
@@ -33,6 +35,25 @@ function resetWorkspace() {
   updateToolbar();
 }
 
+function updateToolbar() {
+  const selected = document.querySelectorAll('.page-card.selected');
+  UI.selCount.textContent = `${selected.length} page(s) selected`;
+  UI.btnExtract.disabled = selected.length === 0;
+  UI.btnClear.disabled = selected.length === 0;
+  UI.btnCrop.disabled = selected.length !== 1;
+}
+
+function downloadFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// --- EVENT LISTENERS ---
+
 UI.btnReset.addEventListener('click', resetWorkspace);
 
 UI.fileInput.addEventListener('change', async (e) => {
@@ -41,7 +62,6 @@ UI.fileInput.addEventListener('change', async (e) => {
 
   if (currentPdfDoc) resetWorkspace();
 
-  // Store the actual file object, not the ArrayBuffer
   currentFile = file;
 
   UI.uploadZone.style.display = 'none';
@@ -49,7 +69,6 @@ UI.fileInput.addEventListener('change', async (e) => {
   UI.toolbar.style.display = 'flex';
   UI.grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Rendering pages...</p>';
 
-  // Use Object URL to prevent pdf.js from detaching the memory buffer
   const fileUrl = URL.createObjectURL(file);
   currentPdfDoc = await pdfjsLib.getDocument(fileUrl).promise;
   
@@ -83,29 +102,21 @@ UI.fileInput.addEventListener('change', async (e) => {
   new Sortable(UI.grid, { animation: 150 });
 });
 
-function updateToolbar() {
-  const selected = document.querySelectorAll('.page-card.selected');
-  UI.selCount.textContent = `${selected.length} page(s) selected`;
-  UI.btnExtract.disabled = selected.length === 0;
-  UI.btnClear.disabled = selected.length === 0;
-  UI.btnCrop.disabled = selected.length !== 1;
-}
-
-// Clear Selections
 UI.btnClear.addEventListener('click', () => {
   document.querySelectorAll('.page-card.selected').forEach(card => card.classList.remove('selected'));
   updateToolbar();
 });
 
-// Extract Sub-PDF
 UI.btnExtract.addEventListener('click', async () => {
   const selectedCards = document.querySelectorAll('.page-card.selected');
   if (selectedCards.length === 0) return;
 
   const { PDFDocument } = PDFLib;
   
-  // Generate a fresh ArrayBuffer on demand to avoid the "detached" error
-  const freshBuffer = await currentFile.arrayBuffer();
+  // Create a disposable clone of the file to prevent detached ArrayBuffer crashes
+  const pristineBlob = currentFile.slice(0, currentFile.size);
+  const freshBuffer = await pristineBlob.arrayBuffer();
+  
   const originalPdf = await PDFDocument.load(freshBuffer);
   const newPdf = await PDFDocument.create();
 
@@ -118,7 +129,6 @@ UI.btnExtract.addEventListener('click', async () => {
   downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), 'extracted-brochure.pdf');
 });
 
-// Open Crop Modal
 UI.btnCrop.addEventListener('click', async () => {
   const selected = document.querySelector('.page-card.selected');
   if (!selected) return;
@@ -144,7 +154,6 @@ UI.btnCrop.addEventListener('click', async () => {
   });
 });
 
-// Crop Actions
 document.getElementById('btn-cancel-crop').addEventListener('click', () => {
   UI.cropModal.style.display = 'none';
   if (cropper) cropper.destroy();
@@ -157,12 +166,3 @@ document.getElementById('btn-save-crop').addEventListener('click', () => {
     UI.cropModal.style.display = 'none';
   }, 'image/webp', 0.9);
 });
-
-function downloadFile(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
