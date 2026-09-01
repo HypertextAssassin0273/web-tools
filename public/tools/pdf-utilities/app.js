@@ -2,7 +2,7 @@ let currentFile = null;
 let currentPdfDoc = null;
 let cropper = null;
 let splitCropper = null; 
-let activeSplitCard = null; // Tracks which card is actively being split
+let activeSplitCard = null;
 
 const UI = {
   uploadZone: document.getElementById('upload-zone'),
@@ -12,6 +12,7 @@ const UI = {
   toolbar: document.getElementById('toolbar'),
   btnExtract: document.getElementById('btn-extract'),
   btnCrop: document.getElementById('btn-crop'),
+  btnSplit: document.getElementById('btn-split'),
   btnClear: document.getElementById('btn-clear'),
   btnReset: document.getElementById('btn-reset'),
   selCount: document.getElementById('selection-count'),
@@ -104,14 +105,13 @@ UI.fileInput.addEventListener('change', async (e) => {
     label.textContent = `Page ${i}`;
     card.appendChild(label);
 
-    // Hover Split Button
     const splitBtn = document.createElement('button');
     splitBtn.className = 'split-btn';
     splitBtn.title = "Split this page";
     splitBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line></svg>';
     
     splitBtn.addEventListener('click', async (btnEvent) => {
-      btnEvent.stopPropagation(); // Don't toggle selection when clicking split
+      btnEvent.stopPropagation();
       await openSplitModal(card);
     });
     
@@ -149,19 +149,24 @@ UI.btnExtract.addEventListener('click', async () => {
   
   const copiedPages = await newPdf.copyPages(originalPdf, pageIndices);
   
-  // Iterate and apply crops to any pages that were marked for splitting
   selectedCards.forEach((card, idx) => {
     const copiedPage = copiedPages[idx];
     
     if (card.dataset.cropRatioX && card.dataset.cropRatioW) {
       const ratioX = parseFloat(card.dataset.cropRatioX);
       const ratioW = parseFloat(card.dataset.cropRatioW);
+      const ratioY = parseFloat(card.dataset.cropRatioY || 0);
+      const ratioH = parseFloat(card.dataset.cropRatioH || 1);
       
       const { x: boxX, y: boxY, width, height } = copiedPage.getMediaBox();
+      
       const cropX = boxX + (width * ratioX);
       const cropW = width * ratioW;
+      // PDF Y-axis starts from the bottom, so we invert the web top-down coordinates
+      const cropY = boxY + (height * (1 - ratioY - ratioH));
+      const cropH = height * ratioH;
       
-      copiedPage.setCropBox(cropX, boxY, cropW, height);
+      copiedPage.setCropBox(cropX, cropY, cropW, cropH);
     }
     
     newPdf.addPage(copiedPage);
@@ -195,26 +200,22 @@ async function openSplitModal(card) {
     ready: function () {
       const imageData = this.cropper.getImageData();
       let left = imageData.left;
-      let width = imageData.width / 2; // Default to 50% split
+      let top = imageData.top;
+      let width = imageData.width / 2; // Default to 50% split horizontally
+      let height = imageData.height;   // Default to 100% split vertically
       
-      // Restore previous split boundary if user re-opens it
       if (card.dataset.cropRatioX) {
          left = imageData.left + (imageData.width * parseFloat(card.dataset.cropRatioX));
          width = imageData.width * parseFloat(card.dataset.cropRatioW);
+         top = imageData.top + (imageData.height * parseFloat(card.dataset.cropRatioY || 0));
+         height = imageData.height * parseFloat(card.dataset.cropRatioH || 1);
       }
 
       this.cropper.setCropBoxData({
         left: left,
-        top: imageData.top,
+        top: top,
         width: width,
-        height: imageData.height
-      });
-    },
-    cropmove: function () {
-      const containerData = this.cropper.getContainerData();
-      this.cropper.setCropBoxData({
-        top: 0,
-        height: containerData.height
+        height: height
       });
     }
   });
@@ -234,12 +235,14 @@ document.getElementById('btn-save-split').addEventListener('click', async () => 
 
   const ratioX = cropData.x / imageData.naturalWidth;
   const ratioW = cropData.width / imageData.naturalWidth;
+  const ratioY = cropData.y / imageData.naturalHeight;
+  const ratioH = cropData.height / imageData.naturalHeight;
 
-  // Save ratios to the DOM element for the final export step
   activeSplitCard.dataset.cropRatioX = ratioX;
   activeSplitCard.dataset.cropRatioW = ratioW;
+  activeSplitCard.dataset.cropRatioY = ratioY;
+  activeSplitCard.dataset.cropRatioH = ratioH;
 
-  // Visually redraw the thumbnail on the card to reflect the split
   const pageNum = parseInt(activeSplitCard.dataset.pageIndex) + 1;
   const page = await currentPdfDoc.getPage(pageNum);
   const viewport = page.getViewport({ scale: 0.5 });
@@ -250,12 +253,13 @@ document.getElementById('btn-save-split').addEventListener('click', async () => 
   await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport }).promise;
 
   const cardCanvas = activeSplitCard.querySelector('canvas');
+  // Update canvas bounds to match the new aspect ratio
   cardCanvas.width = viewport.width * ratioW;
-  cardCanvas.height = viewport.height;
+  cardCanvas.height = viewport.height * ratioH;
   
   cardCanvas.getContext('2d').drawImage(
     tempCanvas,
-    viewport.width * ratioX, 0, viewport.width * ratioW, viewport.height,
+    viewport.width * ratioX, viewport.height * ratioY, viewport.width * ratioW, viewport.height * ratioH,
     0, 0, cardCanvas.width, cardCanvas.height
   );
 
